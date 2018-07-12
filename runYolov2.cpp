@@ -704,8 +704,7 @@ public:
             if (!draw_detections(detections, out_img))
                 return false;
 
-            cv::imshow("out",out_img);
-            cv::waitKey(0);
+            cv::imshow("out", out_img);
         }
 
         return true;
@@ -797,5 +796,6 @@ int main(int argc, char** argv)
     }
 
     std::cout << "Success!" << std::endl;
+    cv::waitKey(0);
     return 0;
 }
