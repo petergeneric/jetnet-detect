@@ -1,0 +1,4 @@
+*.o
+*.plan
+buildYolov2
+runYolov2
