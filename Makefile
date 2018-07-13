@@ -1,9 +1,22 @@
 CXX = g++
 TARGET_BUILD=buildYolov2
 TARGET_RUN=runYolov2
+DEBUG ?= 0
+ASAN ?= 0
 
-CXXFLAGS=-O3 -Wall -Wextra -g -std=c++11 -I. -I/usr/local/cuda/include -I/usr/include/x86_64-linux-gnu
+CXXFLAGS = -Wall -Wextra -std=c++11 -I. -I/usr/local/cuda/include -I/usr/include/x86_64-linux-gnu
 CXXFLAGS += `pkg-config opencv --cflags`
+
+ifeq ($(DEBUG), 1)
+CXXFLAGS += -O0 -g
+else
+CXXFLAGS += -O3
+endif
+
+ifeq ($(ASAN), 1)
+CXXFLAGS += -fno-omit-frame-pointer -fsanitize=address
+LDFLAGS += -fno-omit-frame-pointer -fsanitize=address
+endif
 
 LIBDIRS= -L/usr/local/cuda/lib64
 CVLIBS += `pkg-config opencv --libs`

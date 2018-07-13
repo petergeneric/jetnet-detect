@@ -12,8 +12,6 @@ static Logger gLogger(ILogger::Severity::kINFO);
 #define BATCH_SIZE          1
 #define INPUT_BLOB_NAME     "data"
 #define OUTPUT_BLOB_NAME    "probs"
-#define INPUT_H             416
-#define INPUT_W             416
 
 #define CUDA_CHECK(ans) { gpu_assert((ans), __FILE__, __LINE__); }
 inline void gpu_assert(cudaError_t code, const char *file, int line, bool quit=true)
@@ -285,11 +283,12 @@ private:
         const char* data;
         size_t length;
 
+	//TODO: refactor to work with vector of chars (automatic memory management)
         if (!readGieFromFile(&data, &length, filename))
             return nullptr;
 
         deserialize(data, length);
-        delete data;
+        delete[] data;
         return m_cuda_engine;
     }
 
@@ -456,8 +455,8 @@ public:
         /* colorconvert (BGRBGRBGR... -> RRR...GGG...BBB...) and convert uint8 to float pixel-wise in one go */
         // assume normalization is done by the network arch
         for (int c=0; c<m_net_in_c; ++c) {
-            for (int row=0; row<m_net_in_w; ++row) {
-                for (int col=0; col<m_net_in_h; ++col) {
+            for (int row=0; row<m_net_in_h; ++row) {
+                for (int col=0; col<m_net_in_w; ++col) {
                     const size_t index = col + row*m_in_row_step + c*m_in_channel_step;
                     output[index] = static_cast<float>(image.at<cv::Vec3b>(row, col)[2 - c]);
                 }
@@ -539,6 +538,7 @@ public:
         int new_w=0;
         int new_h=0;
 
+	//TODO: replace with static_cast
         if (((float)m_net_in_w/image_w) < ((float)m_net_in_h/image_h)) {
             new_w = m_net_in_w;
             new_h = (image_h * m_net_in_w)/image_w;
@@ -553,13 +553,13 @@ public:
                 const int row_index = y * m_out_row_step + anchor_index;
                 for (x=0; x<m_net_out_w; ++x) {
                     const int index = x + row_index;
-                    Detection detection;
 
                     // extract objectness
                     const float objectness = input[index + 4*m_out_channel_step];
 
                     // extract class probs if objectness > threshold
                     if (objectness > m_thresh) {
+                        Detection detection;
 
                         // extract box
                         detection.bbox.x = (x + input[index]) / m_net_out_w;
