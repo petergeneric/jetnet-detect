@@ -200,10 +200,20 @@ public:
         return m_network != nullptr;
     }
 
+    bool platform_supports_fp16()
+    {
+        return m_builder->platformHasFastFp16();
+    }
+
+    void platform_set_fp16()
+    {
+        m_builder->setHalf2Mode(true);
+    }
+
     /*
      *  Parse a network model and load its weights
      */
-    virtual INetworkDefinition* parse(DataType dataType) = 0;
+    virtual INetworkDefinition* parse() = 0;
 
     /*
      *  Build an execution engine
@@ -258,12 +268,12 @@ public:
         m_num_anchors(num_anchors),
         m_num_classes(num_classes) {}
 
-    virtual INetworkDefinition* parse(DataType dataType)
+    virtual INetworkDefinition* parse()
     {
         //TODO: refactor with float vector
         const float* weights = parse_weights();
 
-        ITensor* data = m_network->addInput(INPUT_BLOB_NAME, dataType, m_input_dimensions);
+        ITensor* data = m_network->addInput(INPUT_BLOB_NAME, DataType::kFLOAT, m_input_dimensions);
         assert(data);
 
         // input normalization from [0,255] to [0,1]
@@ -473,7 +483,12 @@ int main(int argc, char** argv)
         return -1;
     }
 
-    if (builder.parse(DataType::kFLOAT) == nullptr) {
+    if (builder.platform_supports_fp16()) {
+        builder.platform_set_fp16();
+        std::cout << "Building for inference with FP16 kernels" << std::endl;
+    }
+
+    if (builder.parse() == nullptr) {
         std::cerr << "Failed to parse network" << std::endl;
         return -1;
     }
