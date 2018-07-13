@@ -252,7 +252,7 @@ protected:
 class Yolov2ModelBuilder : public ModelBuilder
 {
 public:
-    Yolov2ModelBuilder(std::string weightsfile, Dims3 input_dimenstions, int num_anchors, int num_classes) :
+    Yolov2ModelBuilder(std::string weightsfile, DimsCHW input_dimenstions, int num_anchors, int num_classes) :
         m_weightsfile(weightsfile),
         m_input_dimensions(input_dimenstions),
         m_num_anchors(num_anchors),
@@ -431,7 +431,7 @@ private:
     }
 
     std::string m_weightsfile;
-    Dims3 m_input_dimensions;
+    DimsCHW m_input_dimensions;
     int m_num_anchors;
     int m_num_classes;
 
@@ -466,7 +466,7 @@ int main(int argc, char** argv)
         return 0;
     }
 
-    Yolov2ModelBuilder builder(weights_file, Dims3{3, INPUT_H, INPUT_W}, 5, 80);
+    Yolov2ModelBuilder builder(weights_file, DimsCHW{3, INPUT_H, INPUT_W}, 5, 80);
 
     if (!builder.init(&gLogger)) {
         std::cerr << "Failed to initialize model builder" << std::endl;

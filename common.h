@@ -1,8 +1,6 @@
 #ifndef _TRT_COMMON_H_
 #define _TRT_COMMON_H_
 #include "NvInfer.h"
-#include "NvOnnxConfig.h"
-#include "NvOnnxParser.h"
 #include <cuda_runtime_api.h>
 #include <algorithm>
 #include <cassert>
@@ -256,8 +254,7 @@ inline void print_version()
     std::cout << "  TensorRT version: "
               << NV_TENSORRT_MAJOR << "."
               << NV_TENSORRT_MINOR << "."
-              << NV_TENSORRT_PATCH << "."
-              << NV_TENSORRT_BUILD << std::endl;
+              << NV_TENSORRT_PATCH << "." << std::endl;
 }
 
 inline string getFileType(const string& filepath)
@@ -276,7 +273,6 @@ inline unsigned int getElementSize(nvinfer1::DataType t)
 {
     switch (t)
     {
-        case nvinfer1::DataType::kINT32: return 4;
         case nvinfer1::DataType::kFLOAT: return 4;
         case nvinfer1::DataType::kHALF: return 2;
         case nvinfer1::DataType::kINT8: return 1;
