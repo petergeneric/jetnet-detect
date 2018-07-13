@@ -12,6 +12,8 @@
 #define INPUT_W             416
 #define BATCH_SIZE          1
 
+//#define USE_PRELU_PLUGIN
+
 using namespace nvinfer1;
 
 static Logger gLogger(ILogger::Severity::kINFO);
@@ -97,10 +99,10 @@ public:
                     DimsHW kernelSize, DimsHW padding=DimsHW{1, 1}, DimsHW stride=DimsHW{1, 1}, float negSlope=0.1)
     {
         Dims input_dim = input.getDimensions();
-        const Weights power{DataType::kFLOAT, nullptr, 0};
+        const Weights default_weights{DataType::kFLOAT, nullptr, 0};
         Weights conv_biases{DataType::kFLOAT, nullptr, 0};
-        Weights scales{DataType::kFLOAT, nullptr, nbOutputMaps};
-        Weights shifts{DataType::kFLOAT, nullptr, nbOutputMaps};
+        Weights bn_scales{DataType::kFLOAT, nullptr, nbOutputMaps};
+        Weights bn_shifts{DataType::kFLOAT, nullptr, nbOutputMaps};
 
         const int num_channels = input_dim.d[0];
 
@@ -108,9 +110,9 @@ public:
         Weights biases = get_weights(weights, nbOutputMaps);
 
         // Read batchnorm weights
-        Weights bn_scales = get_weights(weights, nbOutputMaps);
-        Weights bn_means = get_weights(weights, nbOutputMaps);
-        Weights bn_variances = get_weights(weights, nbOutputMaps);
+        Weights bn_raw_scales = get_weights(weights, nbOutputMaps);
+        Weights bn_raw_means = get_weights(weights, nbOutputMaps);
+        Weights bn_raw_variances = get_weights(weights, nbOutputMaps);
 
         // calculate Batch norm parameters since we implement this layer as a scale layer
         // Batch norm is defined as:
@@ -127,17 +129,19 @@ public:
         //      shift = - mean * scale + bias
         //      power = 1
 
+        //TODO: refactor using vector<float>
         m_scale_vals = std::unique_ptr<float []>(new float[nbOutputMaps]);
         m_shift_vals = std::unique_ptr<float []>(new float[nbOutputMaps]);
-        scales.values = m_scale_vals.get();
-        shifts.values = m_shift_vals.get();
+        bn_scales.values = m_scale_vals.get();
+        bn_shifts.values = m_shift_vals.get();
 
         for (int i=0; i<nbOutputMaps; i++) {
+            //TODO: replace with double's (and check if output result changes)
             float bias = reinterpret_cast<const float *>(biases.values)[i];
-            float bn_scale = reinterpret_cast<const float *>(bn_scales.values)[i];
-            float mean = reinterpret_cast<const float *>(bn_means.values)[i];
-            float variance = reinterpret_cast<const float *>(bn_variances.values)[i];
-            m_scale_vals[i] = bn_scale/(sqrt(variance) + EPSILON);
+            float bn_scale = reinterpret_cast<const float *>(bn_raw_scales.values)[i];
+            float mean = reinterpret_cast<const float *>(bn_raw_means.values)[i];
+            float variance = reinterpret_cast<const float *>(bn_raw_variances.values)[i];
+            m_scale_vals[i] = bn_scale / (sqrt(variance) + EPSILON);
             m_shift_vals[i] = -mean * m_scale_vals[i] + bias;
         }
 
@@ -154,11 +158,12 @@ public:
         conv->setName(std::string(name + "_conv").c_str());
 
         // batch norm layer
-        ILayer* batchnorm = network->addScale(*conv->getOutput(0), ScaleMode::kCHANNEL, shifts, scales, power);
+        ILayer* batchnorm = network->addScale(*conv->getOutput(0), ScaleMode::kCHANNEL, bn_shifts, bn_scales, default_weights);
         if (!batchnorm)
             return nullptr;
         batchnorm->setName(std::string(name + "_bn").c_str());
 
+#ifdef USE_PRELU_PLUGIN
         // Manage plugin through smart pointer and custom deleter
         m_plugin = std::unique_ptr<::plugin::INvPlugin, decltype(nvPluginDeleter)>(plugin::createPReLUPlugin(negSlope),
                                                                                    nvPluginDeleter);
@@ -172,6 +177,39 @@ public:
             return nullptr;
 
         activation->setName(std::string(name + "_PReLU").c_str());
+#else
+        // Building PReLU using native TensorRT layers. PReLU can be calulated by:
+        //
+        // out = neg_slope * in + ReLU(in * (1-neg_slope))
+        //
+        // This requires 2 scale operations (the two multiplications), one ReLU operations and an element wise addition
+
+        m_scale_value_1 = negSlope;
+        m_scale_value_2 = 1 - negSlope;
+        Weights prelu_scales_1{DataType::kFLOAT, &m_scale_value_1, 1};
+        Weights prelu_scales_2{DataType::kFLOAT, &m_scale_value_2, 1};
+
+        ILayer* activation_hidden_1 = network->addScale(*batchnorm->getOutput(0), ScaleMode::kUNIFORM, default_weights, prelu_scales_1, default_weights);
+        if (!activation_hidden_1)
+            return nullptr;
+        activation_hidden_1->setName(std::string(name + "_leaky_hidden_1").c_str());
+
+        ILayer* activation_hidden_2 = network->addScale(*batchnorm->getOutput(0), ScaleMode::kUNIFORM, default_weights, prelu_scales_2, default_weights);
+        if (!activation_hidden_2)
+            return nullptr;
+        activation_hidden_2->setName(std::string(name + "_leaky_hidden_2").c_str());
+
+        ILayer* activation_hidden_3 = network->addActivation(*activation_hidden_2->getOutput(0), ActivationType::kRELU);
+        if (!activation_hidden_3)
+            return nullptr;
+        activation_hidden_3->setName(std::string(name + "_leaky_hidden_3").c_str());
+
+        ILayer* activation = network->addElementWise(*activation_hidden_1->getOutput(0), *activation_hidden_3->getOutput(0), ElementWiseOperation::kSUM);
+        if (!activation)
+            return nullptr;
+        activation->setName(std::string(name + "_leaky").c_str());
+#endif
+
         return activation;
     }
 
@@ -179,8 +217,13 @@ private:
     std::unique_ptr<float []>m_scale_vals;
     std::unique_ptr<float []>m_shift_vals;
 
+#ifdef USE_PRELU_PLUGIN
     void (*nvPluginDeleter)(::plugin::INvPlugin*){[](::plugin::INvPlugin* ptr) { ptr->destroy(); }};
     std::unique_ptr<::plugin::INvPlugin, decltype(nvPluginDeleter)> m_plugin{nullptr, nvPluginDeleter};
+#else
+    float m_scale_value_1;
+    float m_scale_value_2;
+#endif
 };
 
 class ModelBuilder
