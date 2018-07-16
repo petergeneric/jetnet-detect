@@ -12,7 +12,7 @@
 #define INPUT_W             416
 #define BATCH_SIZE          1
 
-//#define USE_PRELU_PLUGIN
+#define USE_PRELU_PLUGIN
 
 using namespace nvinfer1;
 
@@ -32,87 +32,140 @@ bool writeGieToFile(const void* data, size_t len, std::string filename)
     return outfile.good();
 }
 
-Weights get_weights(const float** weights, size_t len)
-{
-    Weights w;
-
-    w.type = DataType::kFLOAT;
-    w.values = *weights;
-    w.count = len;
-
-    *weights += len;
-    return w;
-}
-
 /*
- *  Read darknet weights file
+ *  Darknet weight loader class
  */
-float *parse_weights_file(std::string weights_file, int* major, int* minor, int* revision, size_t* seen)
+class WeightsLoader
 {
-    char* buffer;
-    size_t file_size, result;
-    FILE* fp = fopen(weights_file.c_str(), "rb");
-    if(!fp)
-        return nullptr;
+public:
+    struct FileInfo
+    {
+        int major;
+        int minor;
+        int revision;
+        size_t seen;
+    };
 
-    //TODO: refactor with iostream
-    //
-    // obtain file size:
-    fseek(fp, 0, SEEK_END);
-    file_size = ftell(fp);
-    rewind(fp);
+    DataType datatype;
 
-    // read file header and calculate file size minus header
-    fread(major, sizeof(int), 1, fp);
-    fread(minor, sizeof(int), 1, fp);
-    fread(revision, sizeof(int), 1, fp);
-    if (((*major)*10 + (*minor)) >= 2){
-        fread(seen, sizeof(size_t), 1, fp);
-        file_size -= 3*sizeof(int) + sizeof(size_t);
-    } else {
-        int iseen = 0;
-        fread(&iseen, sizeof(int), 1, fp);
-        *seen = iseen;
-        file_size -= 4*sizeof(int);
+    ~WeightsLoader()
+    {
+        m_file.close();
     }
 
-    //TODO use vector i.s.o malloc
-    // allocate memory to contain the whole file
-    buffer = static_cast<char *>(malloc(file_size));
-    if (!buffer)
-        return nullptr;
+    bool open(std::string weights_file, DataType dt)
+    {
+        FileRevision header_version;
+        size_t seen;
 
-    // copy the file into the buffer
-    result = fread(buffer, 1, file_size, fp);
-    if (result != file_size)
-        return nullptr;
+        datatype = dt;
+        m_file.open(weights_file, std::ifstream::binary);
+        if (!m_file)
+            return false;
 
-    fclose(fp);
+        /* read file revision from header */
+        m_file.read(reinterpret_cast<char *>(&header_version), sizeof header_version);
+        if (!m_file)
+            return false;
 
-    return reinterpret_cast<float *>(buffer);
-}
+        /* read number of seen bytes depending on revision number */
+        if (header_version.major >= 1 || header_version.minor >= 2) {
+            m_file.read(reinterpret_cast<char *>(&seen), sizeof seen);
+            if (!m_file)
+                return false;
+        } else {
+            int iseen;
+            m_file.read(reinterpret_cast<char *>(&iseen), sizeof iseen);
+            if (!m_file)
+                return false;
+            seen = iseen;
+        }
+
+        m_file_info.major = header_version.major;
+        m_file_info.minor = header_version.minor;
+        m_file_info.revision = header_version.revision;
+        m_file_info.seen = seen;
+
+        return true;
+    }
+
+    FileInfo get_file_info()
+    {
+        return m_file_info;
+    }
+
+    /*
+     *  Get weights in float vector from file
+     */
+    std::vector<float> get_floats(size_t len)
+    {
+        std::vector<float> weights(len);
+        m_file.read(reinterpret_cast<char *>(weights.data()), len * sizeof(float));
+
+        // return empty vector on failure
+        if (!m_file)
+            return std::vector<float>();
+
+        return weights;
+    }
+
+    /*
+     *  Get TensorRT weights from a float vector, according to the set datatype
+     */
+    Weights get(std::vector<float> weights)
+    {
+        Weights res{datatype, nullptr, 0};
+        if (!weights.empty()) {
+
+            //TODO: convert to kHALF if dt is kHALF
+            m_store.push_back(weights);             // add to the store to manage weights lifetime
+            res.values = m_store.back().data();     // returned weights refer to the store from now on
+            res.count = m_store.back().size();
+        }
+
+        return res;
+    }
+
+    /*
+     *  Get TensorRT weights from file, according to the set datatype
+     */
+    Weights get(size_t len)
+    {
+        std::vector<float> weights = get_floats(len);
+        return get(weights);
+    }
+
+
+private:
+    struct __attribute__ ((__packed__)) FileRevision
+    {
+        int major;
+        int minor;
+        int revision;
+    };
+
+    std::ifstream m_file;
+    FileInfo m_file_info;
+
+    //TODO: add second store for kHALF weights
+    std::vector<std::vector<float>> m_store;
+};
 
 class Conv2dBatchLeaky
 {
 public:
-    ILayer* init(std::string name, INetworkDefinition* network, const float** weights, ITensor& input, int nbOutputMaps,
+    ILayer* init(std::string name, INetworkDefinition* network, WeightsLoader& weights, ITensor& input, int nbOutputMaps,
                     DimsHW kernelSize, DimsHW padding=DimsHW{1, 1}, DimsHW stride=DimsHW{1, 1}, float negSlope=0.1)
     {
         Dims input_dim = input.getDimensions();
-        const Weights default_weights{DataType::kFLOAT, nullptr, 0};
-        Weights conv_biases{DataType::kFLOAT, nullptr, 0};
-        Weights bn_scales{DataType::kFLOAT, nullptr, nbOutputMaps};
-        Weights bn_shifts{DataType::kFLOAT, nullptr, nbOutputMaps};
-
+        const Weights default_weights{weights.datatype, nullptr, 0};
         const int num_channels = input_dim.d[0];
 
-        // Read bias weights
-        Weights biases = get_weights(weights, nbOutputMaps);
-
-        // Read batchnorm weights
-        Weights bn_raw_scales = get_weights(weights, nbOutputMaps);
-        Weights bn_raw_means = get_weights(weights, nbOutputMaps);
-        Weights bn_raw_variances = get_weights(weights, nbOutputMaps);
+        // Read weights for batchnorm layer (biases are applied in batchnorm i.s.o. conv layer)
+        std::vector<float> biases = weights.get_floats(nbOutputMaps);
+        std::vector<float> bn_raw_scales = weights.get_floats(nbOutputMaps);
+        std::vector<float> bn_raw_means = weights.get_floats(nbOutputMaps);
+        std::vector<float> bn_raw_variances = weights.get_floats(nbOutputMaps);
 
         // calculate Batch norm parameters since we implement this layer as a scale layer
         // Batch norm is defined as:
@@ -127,29 +180,24 @@ public:
         //
         //      scale = bn_scale / (sqrt(variance) + epsilon)
         //      shift = - mean * scale + bias
-        //      power = 1
 
-        //TODO: refactor using vector<float>
-        m_scale_vals = std::unique_ptr<float []>(new float[nbOutputMaps]);
-        m_shift_vals = std::unique_ptr<float []>(new float[nbOutputMaps]);
-        bn_scales.values = m_scale_vals.get();
-        bn_shifts.values = m_shift_vals.get();
+        std::vector<float> scale_vals(nbOutputMaps);
+        std::vector<float> shift_vals(nbOutputMaps);
 
-        for (int i=0; i<nbOutputMaps; i++) {
+        for (int i=0; i<nbOutputMaps; ++i) {
             //TODO: replace with double's (and check if output result changes)
-            float bias = reinterpret_cast<const float *>(biases.values)[i];
-            float bn_scale = reinterpret_cast<const float *>(bn_raw_scales.values)[i];
-            float mean = reinterpret_cast<const float *>(bn_raw_means.values)[i];
-            float variance = reinterpret_cast<const float *>(bn_raw_variances.values)[i];
-            m_scale_vals[i] = bn_scale / (sqrt(variance) + EPSILON);
-            m_shift_vals[i] = -mean * m_scale_vals[i] + bias;
+            scale_vals[i] = bn_raw_scales[i] / (sqrt(bn_raw_variances[i]) + EPSILON);
+            shift_vals[i] = -bn_raw_means[i] * scale_vals[i] + biases[i];
         }
 
-        // read conv weights
-        Weights conv_weights = get_weights(weights, nbOutputMaps * num_channels * kernelSize.h() * kernelSize.w());
+        const Weights bn_scales = weights.get(scale_vals);
+        const Weights bn_shifts = weights.get(shift_vals);
 
-        // conv layer without bias (bias is within batchnorm )
-        IConvolutionLayer* conv = network->addConvolution(input, nbOutputMaps, kernelSize, conv_weights, conv_biases);
+        // Read weights for conv layer
+        const Weights conv_weights = weights.get(nbOutputMaps * num_channels * kernelSize.h() * kernelSize.w());
+
+        // conv layer without bias (bias is within batchnorm)
+        IConvolutionLayer* conv = network->addConvolution(input, nbOutputMaps, kernelSize, conv_weights, default_weights);
         if (!conv)
             return nullptr;
 
@@ -161,8 +209,10 @@ public:
         ILayer* batchnorm = network->addScale(*conv->getOutput(0), ScaleMode::kCHANNEL, bn_shifts, bn_scales, default_weights);
         if (!batchnorm)
             return nullptr;
+
         batchnorm->setName(std::string(name + "_bn").c_str());
 
+        // activation layer
 #ifdef USE_PRELU_PLUGIN
         // Manage plugin through smart pointer and custom deleter
         m_plugin = std::unique_ptr<::plugin::INvPlugin, decltype(nvPluginDeleter)>(plugin::createPReLUPlugin(negSlope),
@@ -186,8 +236,8 @@ public:
 
         m_scale_value_1 = negSlope;
         m_scale_value_2 = 1 - negSlope;
-        Weights prelu_scales_1{DataType::kFLOAT, &m_scale_value_1, 1};
-        Weights prelu_scales_2{DataType::kFLOAT, &m_scale_value_2, 1};
+        const Weights prelu_scales_1{weights.datatype, &m_scale_value_1, 1};
+        const Weights prelu_scales_2{weights.datatype, &m_scale_value_2, 1};
 
         ILayer* activation_hidden_1 = network->addScale(*batchnorm->getOutput(0), ScaleMode::kUNIFORM, default_weights, prelu_scales_1, default_weights);
         if (!activation_hidden_1)
@@ -214,9 +264,6 @@ public:
     }
 
 private:
-    std::unique_ptr<float []>m_scale_vals;
-    std::unique_ptr<float []>m_shift_vals;
-
 #ifdef USE_PRELU_PLUGIN
     void (*nvPluginDeleter)(::plugin::INvPlugin*){[](::plugin::INvPlugin* ptr) { ptr->destroy(); }};
     std::unique_ptr<::plugin::INvPlugin, decltype(nvPluginDeleter)> m_plugin{nullptr, nvPluginDeleter};
@@ -248,7 +295,7 @@ public:
         return m_builder->platformHasFastFp16();
     }
 
-    void platform_set_fp16()
+    void platform_set_paired_image_mode()
     {
         m_builder->setHalf2Mode(true);
     }
@@ -256,7 +303,7 @@ public:
     /*
      *  Parse a network model and load its weights
      */
-    virtual INetworkDefinition* parse() = 0;
+    virtual INetworkDefinition* parse(DataType dt) = 0;
 
     /*
      *  Build an execution engine
@@ -311,22 +358,30 @@ public:
         m_num_anchors(num_anchors),
         m_num_classes(num_classes) {}
 
-    virtual INetworkDefinition* parse()
+    virtual INetworkDefinition* parse(DataType dt)
     {
-        //TODO: refactor with float vector
-        const float* weights = parse_weights();
+        m_logger->log(ILogger::Severity::kINFO, "Opening weights file '" + m_weightsfile + "'");
+        if (!m_weights.open(m_weightsfile, dt)) {
+            m_logger->log(ILogger::Severity::kERROR, "Failed Reading weights file '" + m_weightsfile + "'");
+            return nullptr;
+        }
 
-        ITensor* data = m_network->addInput(INPUT_BLOB_NAME, DataType::kFLOAT, m_input_dimensions);
+        auto file_info = m_weights.get_file_info();
+        m_logger->log(ILogger::Severity::kINFO, "Weights file info: V" + std::to_string(file_info.major) + "."
+                    + std::to_string(file_info.minor) + "." + std::to_string(file_info.revision) + ", seen = " + std::to_string(file_info.seen));
+
+        ITensor* data = m_network->addInput(INPUT_BLOB_NAME, m_weights.datatype, m_input_dimensions);
         assert(data);
 
         // input normalization from [0,255] to [0,1]
-        const Weights power{DataType::kFLOAT, nullptr, 0};
-        const Weights shift{DataType::kFLOAT, nullptr, 0};
-        const Weights scale{DataType::kFLOAT, &m_scale_value, 1};
+        const Weights power{m_weights.datatype, nullptr, 0};
+        const Weights shift{m_weights.datatype, nullptr, 0};
+        const Weights scale{m_weights.datatype, &m_scale_value, 1};
         ILayer* norm = m_network->addScale(*data, ScaleMode::kUNIFORM, shift, scale, power);
         assert(norm);
 
-        ILayer* conv0 = m_convs[0].init("conv0", m_network, &weights, *norm->getOutput(0), 32, DimsHW{3, 3});
+        // Start of the network
+        ILayer* conv0 = m_convs[0].init("conv0", m_network, m_weights, *norm->getOutput(0), 32, DimsHW{3, 3});
         assert(conv0);
 
         IPoolingLayer* pool0 = m_network->addPooling(*conv0->getOutput(0), PoolingType::kMAX, DimsHW{2, 2});
@@ -334,7 +389,7 @@ public:
         pool0->setStride(DimsHW{2, 2});
         pool0->setName("pool0");
 
-        ILayer* conv1 = m_convs[1].init("conv1", m_network, &weights, *pool0->getOutput(0), 64, DimsHW{3, 3});
+        ILayer* conv1 = m_convs[1].init("conv1", m_network, m_weights, *pool0->getOutput(0), 64, DimsHW{3, 3});
         assert(conv1);
 
         IPoolingLayer* pool1 = m_network->addPooling(*conv1->getOutput(0), PoolingType::kMAX, DimsHW{2, 2});
@@ -342,13 +397,13 @@ public:
         pool1->setStride(DimsHW{2, 2});
         pool1->setName("pool1");
 
-        ILayer* conv2 = m_convs[2].init("conv2", m_network, &weights, *pool1->getOutput(0), 128, DimsHW{3, 3});
+        ILayer* conv2 = m_convs[2].init("conv2", m_network, m_weights, *pool1->getOutput(0), 128, DimsHW{3, 3});
         assert(conv2);
 
-        ILayer* conv3 = m_convs[3].init("conv3", m_network, &weights, *conv2->getOutput(0), 64, DimsHW{1, 1}, DimsHW{0, 0});
+        ILayer* conv3 = m_convs[3].init("conv3", m_network, m_weights, *conv2->getOutput(0), 64, DimsHW{1, 1}, DimsHW{0, 0});
         assert(conv3);
 
-        ILayer* conv4 = m_convs[4].init("conv4", m_network, &weights, *conv3->getOutput(0), 128, DimsHW{3, 3});
+        ILayer* conv4 = m_convs[4].init("conv4", m_network, m_weights, *conv3->getOutput(0), 128, DimsHW{3, 3});
         assert(conv4);
 
         IPoolingLayer* pool2 = m_network->addPooling(*conv4->getOutput(0), PoolingType::kMAX, DimsHW{2, 2});
@@ -356,13 +411,13 @@ public:
         pool2->setStride(DimsHW{2, 2});
         pool2->setName("pool2");
 
-        ILayer* conv5 = m_convs[5].init("conv5", m_network, &weights, *pool2->getOutput(0), 256, DimsHW{3, 3});
+        ILayer* conv5 = m_convs[5].init("conv5", m_network, m_weights, *pool2->getOutput(0), 256, DimsHW{3, 3});
         assert(conv5);
 
-        ILayer* conv6 = m_convs[6].init("conv6", m_network, &weights, *conv5->getOutput(0), 128, DimsHW{1, 1}, DimsHW{0, 0});
+        ILayer* conv6 = m_convs[6].init("conv6", m_network, m_weights, *conv5->getOutput(0), 128, DimsHW{1, 1}, DimsHW{0, 0});
         assert(conv6);
 
-        ILayer* conv7 = m_convs[7].init("conv7", m_network, &weights, *conv6->getOutput(0), 256, DimsHW{3, 3});
+        ILayer* conv7 = m_convs[7].init("conv7", m_network, m_weights, *conv6->getOutput(0), 256, DimsHW{3, 3});
         assert(conv7);
 
         IPoolingLayer* pool3 = m_network->addPooling(*conv7->getOutput(0), PoolingType::kMAX, DimsHW{2, 2});
@@ -370,19 +425,19 @@ public:
         pool3->setStride(DimsHW{2, 2});
         pool3->setName("pool3");
 
-        ILayer* conv8 = m_convs[8].init("conv8", m_network, &weights, *pool3->getOutput(0), 512, DimsHW{3, 3});
+        ILayer* conv8 = m_convs[8].init("conv8", m_network, m_weights, *pool3->getOutput(0), 512, DimsHW{3, 3});
         assert(conv8);
 
-        ILayer* conv9 = m_convs[9].init("conv9", m_network, &weights, *conv8->getOutput(0), 256, DimsHW{1, 1}, DimsHW{0, 0});
+        ILayer* conv9 = m_convs[9].init("conv9", m_network, m_weights, *conv8->getOutput(0), 256, DimsHW{1, 1}, DimsHW{0, 0});
         assert(conv9);
 
-        ILayer* conv10 = m_convs[10].init("conv10", m_network, &weights, *conv9->getOutput(0), 512, DimsHW{3, 3});
+        ILayer* conv10 = m_convs[10].init("conv10", m_network, m_weights, *conv9->getOutput(0), 512, DimsHW{3, 3});
         assert(conv10);
 
-        ILayer* conv11 = m_convs[11].init("conv11", m_network, &weights, *conv10->getOutput(0), 256, DimsHW{1, 1}, DimsHW{0, 0});
+        ILayer* conv11 = m_convs[11].init("conv11", m_network, m_weights, *conv10->getOutput(0), 256, DimsHW{1, 1}, DimsHW{0, 0});
         assert(conv11);
 
-        ILayer* conv12 = m_convs[12].init("conv12", m_network, &weights, *conv11->getOutput(0), 512, DimsHW{3, 3});
+        ILayer* conv12 = m_convs[12].init("conv12", m_network, m_weights, *conv11->getOutput(0), 512, DimsHW{3, 3});
         assert(conv12);
 
         IPoolingLayer* pool4 = m_network->addPooling(*conv12->getOutput(0), PoolingType::kMAX, DimsHW{2, 2});
@@ -390,29 +445,29 @@ public:
         pool4->setStride(DimsHW{2, 2});
         pool4->setName("pool4");
 
-        ILayer* conv13 = m_convs[13].init("conv13", m_network, &weights, *pool4->getOutput(0), 1024, DimsHW{3, 3});
+        ILayer* conv13 = m_convs[13].init("conv13", m_network, m_weights, *pool4->getOutput(0), 1024, DimsHW{3, 3});
         assert(conv13);
 
-        ILayer* conv14 = m_convs[14].init("conv14", m_network, &weights, *conv13->getOutput(0), 512, DimsHW{1, 1}, DimsHW{0, 0});
+        ILayer* conv14 = m_convs[14].init("conv14", m_network, m_weights, *conv13->getOutput(0), 512, DimsHW{1, 1}, DimsHW{0, 0});
         assert(conv14);
 
-        ILayer* conv15 = m_convs[15].init("conv15", m_network, &weights, *conv14->getOutput(0), 1024, DimsHW{3, 3});
+        ILayer* conv15 = m_convs[15].init("conv15", m_network, m_weights, *conv14->getOutput(0), 1024, DimsHW{3, 3});
         assert(conv15);
 
-        ILayer* conv16 = m_convs[16].init("conv16", m_network, &weights, *conv15->getOutput(0), 512, DimsHW{1, 1}, DimsHW{0, 0});
+        ILayer* conv16 = m_convs[16].init("conv16", m_network, m_weights, *conv15->getOutput(0), 512, DimsHW{1, 1}, DimsHW{0, 0});
         assert(conv16);
 
-        ILayer* conv17 = m_convs[17].init("conv17", m_network, &weights, *conv16->getOutput(0), 1024, DimsHW{3, 3});
+        ILayer* conv17 = m_convs[17].init("conv17", m_network, m_weights, *conv16->getOutput(0), 1024, DimsHW{3, 3});
         assert(conv17);
 
-        ILayer* conv18 = m_convs[18].init("conv18", m_network, &weights, *conv17->getOutput(0), 1024, DimsHW{3, 3});
+        ILayer* conv18 = m_convs[18].init("conv18", m_network, m_weights, *conv17->getOutput(0), 1024, DimsHW{3, 3});
         assert(conv18);
 
-        ILayer* conv19 = m_convs[19].init("conv19", m_network, &weights, *conv18->getOutput(0), 1024, DimsHW{3, 3});
+        ILayer* conv19 = m_convs[19].init("conv19", m_network, m_weights, *conv18->getOutput(0), 1024, DimsHW{3, 3});
         assert(conv19);
 
         // Parallel branch (input from conv12)
-        ILayer* conv20 = m_convs[20].init("conv20", m_network, &weights, *conv12->getOutput(0), 64, DimsHW{1, 1}, DimsHW{0, 0});
+        ILayer* conv20 = m_convs[20].init("conv20", m_network, m_weights, *conv12->getOutput(0), 64, DimsHW{1, 1}, DimsHW{0, 0});
         assert(conv20);
 
         m_reorg_plugin = std::unique_ptr<::plugin::INvPlugin, decltype(nvPluginDeleter)>(plugin::createYOLOReorgPlugin(2),
@@ -430,14 +485,14 @@ public:
         assert(concat);
 
         const int conv21_num_filters = 1024;
-        ILayer* conv21 = m_convs[21].init("conv21", m_network, &weights, *concat->getOutput(0), conv21_num_filters, DimsHW{3, 3});
+        ILayer* conv21 = m_convs[21].init("conv21", m_network, m_weights, *concat->getOutput(0), conv21_num_filters, DimsHW{3, 3});
         assert(conv21);
 
         // last conv layer is convolution only (no batch norm, no activation)
         DimsHW conv22_kernel_size{1, 1};
         const int conv22_num_filters = m_num_anchors * (5 + m_num_classes);
-        Weights conv22_biases = get_weights(&weights, conv22_num_filters);
-        Weights conv22_weights = get_weights(&weights, conv22_num_filters * conv21_num_filters * conv22_kernel_size.h() * conv22_kernel_size.w());
+        Weights conv22_biases = m_weights.get(conv22_num_filters);
+        Weights conv22_weights = m_weights.get(conv22_num_filters * conv21_num_filters * conv22_kernel_size.h() * conv22_kernel_size.w());
         ILayer* conv22 = m_network->addConvolution(*conv21->getOutput(0), conv22_num_filters, conv22_kernel_size, conv22_weights, conv22_biases);
         assert(conv22);
 
@@ -464,30 +519,12 @@ public:
 
 private:
 
-    const float* parse_weights()
-    {
-        const float* weights;
-        int major, minor, revision;
-        size_t seen;
-
-        m_logger->log(ILogger::Severity::kINFO, "Reading weights file '" + m_weightsfile + "'");
-        weights = parse_weights_file(m_weightsfile, &major, &minor, &revision, &seen);
-        if (!weights) {
-            m_logger->log(ILogger::Severity::kERROR, "Failed to read weights file");
-            return nullptr;
-        }
-
-        m_logger->log(ILogger::Severity::kINFO, "Weights file info: V" + std::to_string(major) + "."
-                    + std::to_string(minor) + "." + std::to_string(revision) + ", seen = " + std::to_string(seen));
-
-        return weights;
-    }
-
     std::string m_weightsfile;
     DimsCHW m_input_dimensions;
     int m_num_anchors;
     int m_num_classes;
 
+    WeightsLoader m_weights;
     Conv2dBatchLeaky m_convs[22];
     const float m_scale_value = 1/255.0;
 
@@ -526,12 +563,15 @@ int main(int argc, char** argv)
         return -1;
     }
 
+    DataType weights_datatype = DataType::kFLOAT;
+
     if (builder.platform_supports_fp16()) {
-        builder.platform_set_fp16();
-        std::cout << "Building for inference with FP16 kernels" << std::endl;
+        //weights_datatype = kHALF;
+        builder.platform_set_paired_image_mode();
+        std::cout << "Building for inference with FP16 kernels and paired image mode" << std::endl;
     }
 
-    if (builder.parse() == nullptr) {
+    if (builder.parse(weights_datatype) == nullptr) {
         std::cerr << "Failed to parse network" << std::endl;
         return -1;
     }

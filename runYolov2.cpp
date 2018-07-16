@@ -538,7 +538,7 @@ public:
         int new_w=0;
         int new_h=0;
 
-	//TODO: replace with static_cast
+        //TODO: replace with static_cast
         if (((float)m_net_in_w/image_w) < ((float)m_net_in_h/image_h)) {
             new_w = m_net_in_w;
             new_h = (image_h * m_net_in_w)/image_w;
