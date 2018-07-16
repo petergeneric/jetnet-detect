@@ -1,6 +1,7 @@
 #include <opencv2/opencv.hpp>
 #include <cassert>
 #include <cmath>
+#include "fp16.h"
 #include "common.h"
 #include "NvInfer.h"
 #include "NvInferPlugin.h"
@@ -115,12 +116,25 @@ public:
     Weights get(std::vector<float> weights)
     {
         Weights res{datatype, nullptr, 0};
-        if (!weights.empty()) {
 
-            //TODO: convert to kHALF if dt is kHALF
-            m_store.push_back(weights);             // add to the store to manage weights lifetime
-            res.values = m_store.back().data();     // returned weights refer to the store from now on
-            res.count = m_store.back().size();
+        if (weights.empty())
+            return res;
+
+        if (datatype == DataType::kHALF) {
+            std::vector<__half> weights_half(weights.size());
+
+            // convert weights to 16-bit float weights
+            for (size_t i=0; i<weights.size(); ++i) {
+                weights_half[i] = fp16::__float2half(weights[i]);
+            }
+
+            m_half_store.push_back(weights_half);           // add to the store to manage weights lifetime
+            res.values = m_half_store.back().data();        // returned weights refer to the store from now on
+            res.count = m_half_store.back().size();
+        } else {
+            m_float_store.push_back(weights);               // add to the store to manage weights lifetime
+            res.values = m_float_store.back().data();       // returned weights refer to the store from now on
+            res.count = m_float_store.back().size();
         }
 
         return res;
@@ -147,8 +161,8 @@ private:
     std::ifstream m_file;
     FileInfo m_file_info;
 
-    //TODO: add second store for kHALF weights
-    std::vector<std::vector<float>> m_store;
+    std::vector<std::vector<float>> m_float_store;
+    std::vector<std::vector<__half>> m_half_store;
 };
 
 class Conv2dBatchLeaky
@@ -234,10 +248,20 @@ public:
         //
         // This requires 2 scale operations (the two multiplications), one ReLU operations and an element wise addition
 
-        m_scale_value_1 = negSlope;
-        m_scale_value_2 = 1 - negSlope;
-        const Weights prelu_scales_1{weights.datatype, &m_scale_value_1, 1};
-        const Weights prelu_scales_2{weights.datatype, &m_scale_value_2, 1};
+        Weights prelu_scales_1{weights.datatype, nullptr, 1};
+        Weights prelu_scales_2{weights.datatype, nullptr, 1};
+
+        if (weights.datatype == DataType::kHALF) {
+            m_scale_value_1_h = fp16::__float2half(negSlope);
+            m_scale_value_2_h = fp16::__float2half(1 - negSlope);
+            prelu_scales_1.values = &m_scale_value_1_h;
+            prelu_scales_2.values = &m_scale_value_2_h;
+        } else {
+            m_scale_value_1_f = negSlope;
+            m_scale_value_2_f = 1 - negSlope;
+            prelu_scales_1.values = &m_scale_value_1_f;
+            prelu_scales_2.values = &m_scale_value_2_f;
+        }
 
         ILayer* activation_hidden_1 = network->addScale(*batchnorm->getOutput(0), ScaleMode::kUNIFORM, default_weights, prelu_scales_1, default_weights);
         if (!activation_hidden_1)
@@ -268,8 +292,10 @@ private:
     void (*nvPluginDeleter)(::plugin::INvPlugin*){[](::plugin::INvPlugin* ptr) { ptr->destroy(); }};
     std::unique_ptr<::plugin::INvPlugin, decltype(nvPluginDeleter)> m_plugin{nullptr, nvPluginDeleter};
 #else
-    float m_scale_value_1;
-    float m_scale_value_2;
+    float m_scale_value_1_f;
+    float m_scale_value_2_f;
+    __half m_scale_value_1_h;
+    __half m_scale_value_2_h;
 #endif
 };
 
@@ -370,13 +396,14 @@ public:
         m_logger->log(ILogger::Severity::kINFO, "Weights file info: V" + std::to_string(file_info.major) + "."
                     + std::to_string(file_info.minor) + "." + std::to_string(file_info.revision) + ", seen = " + std::to_string(file_info.seen));
 
-        ITensor* data = m_network->addInput(INPUT_BLOB_NAME, m_weights.datatype, m_input_dimensions);
+        // Note: assume the input is always 32-bit floats
+        ITensor* data = m_network->addInput(INPUT_BLOB_NAME, DataType::kFLOAT, m_input_dimensions);
         assert(data);
 
         // input normalization from [0,255] to [0,1]
-        const Weights power{m_weights.datatype, nullptr, 0};
-        const Weights shift{m_weights.datatype, nullptr, 0};
-        const Weights scale{m_weights.datatype, &m_scale_value, 1};
+        const Weights power{dt, nullptr, 0};
+        const Weights shift{dt, nullptr, 0};
+        const Weights scale{dt, dt == DataType::kHALF ? reinterpret_cast<const void*>(&m_scale_value_h) : reinterpret_cast<const void*>(&m_scale_value_f), 1};
         ILayer* norm = m_network->addScale(*data, ScaleMode::kUNIFORM, shift, scale, power);
         assert(norm);
 
@@ -526,7 +553,8 @@ private:
 
     WeightsLoader m_weights;
     Conv2dBatchLeaky m_convs[22];
-    const float m_scale_value = 1/255.0;
+    const float m_scale_value_f = 1/255.0;
+    const __half m_scale_value_h = fp16::__float2half(m_scale_value_f);
 
     void (*nvPluginDeleter)(::plugin::INvPlugin*){[](::plugin::INvPlugin* ptr) { ptr->destroy(); }};
     std::unique_ptr<::plugin::INvPlugin, decltype(nvPluginDeleter)> m_reorg_plugin{nullptr, nvPluginDeleter};
@@ -566,7 +594,7 @@ int main(int argc, char** argv)
     DataType weights_datatype = DataType::kFLOAT;
 
     if (builder.platform_supports_fp16()) {
-        //weights_datatype = kHALF;
+        weights_datatype = DataType::kHALF;
         builder.platform_set_paired_image_mode();
         std::cout << "Building for inference with FP16 kernels and paired image mode" << std::endl;
     }
