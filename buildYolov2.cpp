@@ -13,8 +13,6 @@
 #define INPUT_W             416
 #define BATCH_SIZE          1
 
-#define USE_PRELU_PLUGIN
-
 using namespace nvinfer1;
 
 static Logger gLogger(ILogger::Severity::kINFO);
@@ -165,15 +163,109 @@ private:
     std::vector<std::vector<__half>> m_half_store;
 };
 
+class ILeakyRelu
+{
+public:
+    virtual ILayer* init(std::string name, INetworkDefinition* network, ITensor& input, float negSlope, DataType dt) = 0;
+};
+
+class LeakyReluPlugin : public ILeakyRelu
+{
+public:
+    ILayer* init(std::string name, INetworkDefinition* network, ITensor& input, float negSlope, DataType dt)
+    {
+        (void)dt;
+        // Manage plugin through smart pointer and custom deleter
+        m_plugin = std::unique_ptr<::plugin::INvPlugin, decltype(nvPluginDeleter)>(plugin::createPReLUPlugin(negSlope),
+                                                                                   nvPluginDeleter);
+        if (!m_plugin)
+            return nullptr;
+
+        // Leaky ReLU through PReLU plugin (not natively supported)
+        ITensor *batchnorm_tensor = &input;
+        ILayer* activation = network->addPlugin(&batchnorm_tensor, 1, *m_plugin);
+        if (!activation)
+            return nullptr;
+
+        activation->setName(std::string(name + "_PReLU").c_str());
+
+        return activation;
+    }
+
+private:
+    void (*nvPluginDeleter)(::plugin::INvPlugin*){[](::plugin::INvPlugin* ptr) { ptr->destroy(); }};
+    std::unique_ptr<::plugin::INvPlugin, decltype(nvPluginDeleter)> m_plugin{nullptr, nvPluginDeleter};
+};
+
+class LeakyReluNative : public ILeakyRelu
+{
+    /*
+     * Building PReLU using native TensorRT layers. Leaky ReLU can be calulated by:
+     *
+     * out = neg_slope * in + ReLU(in * (1-neg_slope))
+     *
+     * This requires 2 scale operations (the two multiplications), one ReLU operations and an element wise addition
+     */
+public:
+    ILayer* init(std::string name, INetworkDefinition* network, ITensor& input, float negSlope, DataType dt)
+    {
+        const Weights default_weights{dt, nullptr, 0};
+        Weights scales_1{dt, nullptr, 1};
+        Weights scales_2{dt, nullptr, 1};
+
+        if (dt == DataType::kHALF) {
+            m_scale_value_1_h = fp16::__float2half(negSlope);
+            m_scale_value_2_h = fp16::__float2half(1 - negSlope);
+            scales_1.values = &m_scale_value_1_h;
+            scales_2.values = &m_scale_value_2_h;
+        } else {
+            m_scale_value_1_f = negSlope;
+            m_scale_value_2_f = 1 - negSlope;
+            scales_1.values = &m_scale_value_1_f;
+            scales_2.values = &m_scale_value_2_f;
+        }
+
+        ILayer* hidden_1 = network->addScale(input, ScaleMode::kUNIFORM, default_weights, scales_1, default_weights);
+        if (!hidden_1)
+            return nullptr;
+        hidden_1->setName(std::string(name + "_leaky_hidden_1").c_str());
+
+        ILayer* hidden_2 = network->addScale(input, ScaleMode::kUNIFORM, default_weights, scales_2, default_weights);
+        if (!hidden_2)
+            return nullptr;
+        hidden_2->setName(std::string(name + "_leaky_hidden_2").c_str());
+
+        ILayer* hidden_3 = network->addActivation(*hidden_2->getOutput(0), ActivationType::kRELU);
+        if (!hidden_3)
+            return nullptr;
+        hidden_3->setName(std::string(name + "_leaky_hidden_3").c_str());
+
+        ILayer* activation = network->addElementWise(*hidden_1->getOutput(0), *hidden_3->getOutput(0), ElementWiseOperation::kSUM);
+        if (!activation)
+            return nullptr;
+        activation->setName(std::string(name + "_leaky").c_str());
+
+        return activation;
+    }
+
+private:
+    float m_scale_value_1_f;
+    float m_scale_value_2_f;
+    __half m_scale_value_1_h;
+    __half m_scale_value_2_h;
+};
+
 class Conv2dBatchLeaky
 {
 public:
     ILayer* init(std::string name, INetworkDefinition* network, WeightsLoader& weights, ITensor& input, int nbOutputMaps,
-                    DimsHW kernelSize, DimsHW padding=DimsHW{1, 1}, DimsHW stride=DimsHW{1, 1}, float negSlope=0.1)
+                    DimsHW kernelSize, DimsHW padding=DimsHW{1, 1}, DimsHW stride=DimsHW{1, 1}, float negSlope=0.1,
+                    std::unique_ptr<ILeakyRelu> act_impl=std::unique_ptr<ILeakyRelu>(new LeakyReluPlugin))
     {
         Dims input_dim = input.getDimensions();
         const Weights default_weights{weights.datatype, nullptr, 0};
         const int num_channels = input_dim.d[0];
+        m_activation = std::move(act_impl);
 
         // Read weights for batchnorm layer (biases are applied in batchnorm i.s.o. conv layer)
         std::vector<float> biases = weights.get_floats(nbOutputMaps);
@@ -227,76 +319,11 @@ public:
         batchnorm->setName(std::string(name + "_bn").c_str());
 
         // activation layer
-#ifdef USE_PRELU_PLUGIN
-        // Manage plugin through smart pointer and custom deleter
-        m_plugin = std::unique_ptr<::plugin::INvPlugin, decltype(nvPluginDeleter)>(plugin::createPReLUPlugin(negSlope),
-                                                                                   nvPluginDeleter);
-        if (!m_plugin)
-            return nullptr;
-
-        // Leaky ReLU through PReLU plugin (not natively supported)
-        ITensor *batchnorm_tensor = batchnorm->getOutput(0);
-        ILayer* activation = network->addPlugin(&batchnorm_tensor, 1, *m_plugin);
-        if (!activation)
-            return nullptr;
-
-        activation->setName(std::string(name + "_PReLU").c_str());
-#else
-        // Building PReLU using native TensorRT layers. PReLU can be calulated by:
-        //
-        // out = neg_slope * in + ReLU(in * (1-neg_slope))
-        //
-        // This requires 2 scale operations (the two multiplications), one ReLU operations and an element wise addition
-
-        Weights prelu_scales_1{weights.datatype, nullptr, 1};
-        Weights prelu_scales_2{weights.datatype, nullptr, 1};
-
-        if (weights.datatype == DataType::kHALF) {
-            m_scale_value_1_h = fp16::__float2half(negSlope);
-            m_scale_value_2_h = fp16::__float2half(1 - negSlope);
-            prelu_scales_1.values = &m_scale_value_1_h;
-            prelu_scales_2.values = &m_scale_value_2_h;
-        } else {
-            m_scale_value_1_f = negSlope;
-            m_scale_value_2_f = 1 - negSlope;
-            prelu_scales_1.values = &m_scale_value_1_f;
-            prelu_scales_2.values = &m_scale_value_2_f;
-        }
-
-        ILayer* activation_hidden_1 = network->addScale(*batchnorm->getOutput(0), ScaleMode::kUNIFORM, default_weights, prelu_scales_1, default_weights);
-        if (!activation_hidden_1)
-            return nullptr;
-        activation_hidden_1->setName(std::string(name + "_leaky_hidden_1").c_str());
-
-        ILayer* activation_hidden_2 = network->addScale(*batchnorm->getOutput(0), ScaleMode::kUNIFORM, default_weights, prelu_scales_2, default_weights);
-        if (!activation_hidden_2)
-            return nullptr;
-        activation_hidden_2->setName(std::string(name + "_leaky_hidden_2").c_str());
-
-        ILayer* activation_hidden_3 = network->addActivation(*activation_hidden_2->getOutput(0), ActivationType::kRELU);
-        if (!activation_hidden_3)
-            return nullptr;
-        activation_hidden_3->setName(std::string(name + "_leaky_hidden_3").c_str());
-
-        ILayer* activation = network->addElementWise(*activation_hidden_1->getOutput(0), *activation_hidden_3->getOutput(0), ElementWiseOperation::kSUM);
-        if (!activation)
-            return nullptr;
-        activation->setName(std::string(name + "_leaky").c_str());
-#endif
-
-        return activation;
+        return m_activation->init(name, network, *batchnorm->getOutput(0), negSlope, weights.datatype);
     }
 
 private:
-#ifdef USE_PRELU_PLUGIN
-    void (*nvPluginDeleter)(::plugin::INvPlugin*){[](::plugin::INvPlugin* ptr) { ptr->destroy(); }};
-    std::unique_ptr<::plugin::INvPlugin, decltype(nvPluginDeleter)> m_plugin{nullptr, nvPluginDeleter};
-#else
-    float m_scale_value_1_f;
-    float m_scale_value_2_f;
-    __half m_scale_value_1_h;
-    __half m_scale_value_2_h;
-#endif
+    std::unique_ptr<ILeakyRelu> m_activation;
 };
 
 class ModelBuilder
@@ -564,9 +591,10 @@ private:
 int main(int argc, char** argv)
 {
     std::string keys =
-        "{help h usage ? |      | print this message           }"
-        "{@weightsfile   |<none>| darknet weights file         }"
-        "{@planfile      |<none>| serializes GIE output file   }";
+        "{help h usage ? |      | print this message                            }"
+        "{@weightsfile   |<none>| darknet weights file                          }"
+        "{@planfile      |<none>| serializes GIE output file                    }"
+        "{fp16           |      | optimize for FP16 precision (FP32 by default) }";
 
     cv::CommandLineParser parser(argc, argv, keys);
     parser.about("Jetnet YOLOv2 builder");
@@ -578,6 +606,7 @@ int main(int argc, char** argv)
 
     auto weights_file = parser.get<std::string>("@weightsfile");
     auto output_file = parser.get<std::string>("@planfile");
+    auto float_16_opt = parser.has("fp16");
 
     if (!parser.check()) {
         parser.printErrors();
@@ -593,10 +622,16 @@ int main(int argc, char** argv)
 
     DataType weights_datatype = DataType::kFLOAT;
 
-    if (builder.platform_supports_fp16()) {
-        weights_datatype = DataType::kHALF;
-        builder.platform_set_paired_image_mode();
+    if (float_16_opt) {
+        if (!builder.platform_supports_fp16()) {
+            std::cerr << "Platform does not support FP16" << std::endl;
+            return -1;
+        }
         std::cout << "Building for inference with FP16 kernels and paired image mode" << std::endl;
+        weights_datatype = DataType::kHALF;
+
+        // in case batch > 1, this will improve speed
+        builder.platform_set_paired_image_mode();
     }
 
     if (builder.parse(weights_datatype) == nullptr) {
