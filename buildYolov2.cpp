@@ -405,11 +405,12 @@ protected:
 class Yolov2ModelBuilder : public ModelBuilder
 {
 public:
-    Yolov2ModelBuilder(std::string weightsfile, DimsCHW input_dimenstions, int num_anchors, int num_classes) :
+    Yolov2ModelBuilder(std::string weightsfile, DimsCHW input_dimenstions, int num_anchors, int num_classes, int num_coords=4) :
         m_weightsfile(weightsfile),
         m_input_dimensions(input_dimenstions),
         m_num_anchors(num_anchors),
-        m_num_classes(num_classes) {}
+        m_num_classes(num_classes),
+        m_num_coords(num_coords) {}
 
     virtual INetworkDefinition* parse(DataType dt)
     {
@@ -544,7 +545,7 @@ public:
 
         // last conv layer is convolution only (no batch norm, no activation)
         DimsHW conv22_kernel_size{1, 1};
-        const int conv22_num_filters = m_num_anchors * (5 + m_num_classes);
+        const int conv22_num_filters = m_num_anchors * (1 + m_num_coords + m_num_classes);
         Weights conv22_biases = m_weights.get(conv22_num_filters);
         Weights conv22_weights = m_weights.get(conv22_num_filters * conv21_num_filters * conv22_kernel_size.h() * conv22_kernel_size.w());
         ILayer* conv22 = m_network->addConvolution(*conv21->getOutput(0), conv22_num_filters, conv22_kernel_size, conv22_weights, conv22_biases);
@@ -553,7 +554,7 @@ public:
         // Region layer
         plugin::RegionParameters region_params;
         region_params.num = m_num_anchors;
-        region_params.coords = 4;
+        region_params.coords = m_num_coords;
         region_params.classes = m_num_classes;
         region_params.smTree = nullptr;
         m_region_plugin = std::unique_ptr<::plugin::INvPlugin, decltype(nvPluginDeleter)>(
@@ -577,6 +578,7 @@ private:
     DimsCHW m_input_dimensions;
     int m_num_anchors;
     int m_num_classes;
+    int m_num_coords;
 
     WeightsLoader m_weights;
     Conv2dBatchLeaky m_convs[22];

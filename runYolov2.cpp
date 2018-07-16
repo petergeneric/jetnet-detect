@@ -123,28 +123,22 @@ private:
     std::vector<::plugin::RegionParameters> m_region_params;
 };
 
-bool readGieFromFile(const char** data, size_t* len, std::string filename)
+std::vector<char> readGieFromFile(std::string filename)
 {
     std::ifstream infile(filename, std::ifstream::binary | std::istream::ate);
 
     if (!infile)
-        return false;
+        return std::vector<char>();
 
     infile.seekg(0, infile.end);
     int length = infile.tellg();
     infile.seekg(0, infile.beg);
 
-    char* buffer = new char[length];
-    if (!buffer)
-        return false;
-
-    infile.read(buffer, length);
+    std::vector<char> buffer(length);
+    infile.read(buffer.data(), length);
     infile.close();
 
-    *data = buffer;
-    *len = length;
-
-    return true;
+    return buffer;
 }
 
 bool read_names_file(std::vector<std::string>& names, std::string filename)
@@ -280,15 +274,11 @@ private:
 
     ICudaEngine* deserialize(std::string filename)
     {
-        const char* data;
-        size_t length;
-
-	//TODO: refactor to work with vector of chars (automatic memory management)
-        if (!readGieFromFile(&data, &length, filename))
+        std::vector<char> data = readGieFromFile(filename);
+        if (data.empty())
             return nullptr;
 
-        deserialize(data, length);
-        delete[] data;
+        deserialize(data.data(), data.size());
         return m_cuda_engine;
     }
 
@@ -499,6 +489,7 @@ public:
             return false;
 
         m_net_anchors = params.num;
+        m_net_coords = params.coords;
         m_net_classes = params.classes;
 
         // validate number of anchor priors
@@ -538,8 +529,8 @@ public:
         int new_w=0;
         int new_h=0;
 
-        //TODO: replace with static_cast
-        if (((float)m_net_in_w/image_w) < ((float)m_net_in_h/image_h)) {
+        // calculate image width/height that the image must have to fit the network while keeping the aspect ratio fixed
+        if ((m_net_in_w * image_h) < (m_net_in_h * image_w)) {
             new_w = m_net_in_w;
             new_h = (image_h * m_net_in_w)/image_w;
         } else {
@@ -548,14 +539,14 @@ public:
         }
 
         for (anchor=0; anchor<m_net_anchors; ++anchor) {
-            const int anchor_index = anchor * m_out_channel_step * (5 + m_net_classes);
+            const int anchor_index = anchor * m_out_channel_step * (1 + m_net_coords + m_net_classes);
             for (y=0; y<m_net_out_h; ++y) {
                 const int row_index = y * m_out_row_step + anchor_index;
                 for (x=0; x<m_net_out_w; ++x) {
                     const int index = x + row_index;
 
                     // extract objectness
-                    const float objectness = input[index + 4*m_out_channel_step];
+                    const float objectness = input[index + m_net_coords * m_out_channel_step];
 
                     // extract class probs if objectness > threshold
                     if (objectness > m_thresh) {
@@ -576,7 +567,7 @@ public:
                         // extract class label and prob of highest class prob
                         detection.probability = 0;
                         for (cls=0; cls < m_net_classes; ++cls) {
-                            float prob = objectness * input[index + (cls + 5) * m_out_channel_step];
+                            float prob = objectness * input[index + (1 + m_net_coords + cls) * m_out_channel_step];
                             if (prob > m_thresh && prob > detection.probability) {
                                 detection.class_label_index = cls;
                                 detection.probability = prob;
@@ -722,7 +713,7 @@ private:
     int m_net_in_c;
     int m_net_out_w;
     int m_net_out_h;
-    // TODO: add m_net_coords
+    int m_net_coords;
     int m_net_anchors;
     int m_net_classes;
 
