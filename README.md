@@ -1,5 +1,4 @@
 # Jetnet
-
 TensorRT implementation of YOLOv2.
 
 ## Building the code
