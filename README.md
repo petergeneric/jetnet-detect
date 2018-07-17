@@ -1,5 +1,15 @@
 # Jetnet
-TensorRT implementation of YOLOv2.
+<img src="jetnet_logo.png" alt="Logo" width="250">
+
+Super fast TensorRT implementation of YOLOv2
+
+| Platform             | FP32 mode    | FP16 mode | 
+|:---------------------|:-------------|:----------|
+| JETSON TX2           | 18.5 FPS     | 27 FPS    |
+| GTX1080              | 220 FPS      | N.A.      |
+
+
+NOTE: stats without pre/post processing, 416x416 input resolution
 
 ## Building the code
 
