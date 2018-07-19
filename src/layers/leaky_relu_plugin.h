@@ -1,0 +1,24 @@
+#ifndef LEAKY_RELU_PLUGIN_H
+#define LEAKY_RELU_PLUGIN_H
+
+#include "leaky_relu.h"
+#include <NvInferPlugin.h>
+#include <memory>
+
+namespace jetnet
+{
+
+class LeakyReluPlugin : public ILeakyRelu
+{
+public:
+    nvinfer1::ILayer* operator()(std::string name, nvinfer1::INetworkDefinition* network, nvinfer1::ITensor& input,
+                               float negSlope, nvinfer1::DataType dt);
+
+private:
+    void (*nvPluginDeleter)(nvinfer1::plugin::INvPlugin*){[](nvinfer1::plugin::INvPlugin* ptr) { ptr->destroy(); }};
+    std::unique_ptr<nvinfer1::plugin::INvPlugin, decltype(nvPluginDeleter)> m_plugin{nullptr, nvPluginDeleter};
+};
+
+}
+
+#endif /* LEAKY_RELU_PLUGIN_H */
