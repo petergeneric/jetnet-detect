@@ -172,7 +172,7 @@ public:
 class LeakyReluPlugin : public ILeakyRelu
 {
 public:
-    ILayer* init(std::string name, INetworkDefinition* network, ITensor& input, float negSlope, DataType dt)
+    ILayer* operator()(std::string name, INetworkDefinition* network, ITensor& input, float negSlope, DataType dt)
     {
         (void)dt;
         // Manage plugin through smart pointer and custom deleter
@@ -207,7 +207,7 @@ class LeakyReluNative : public ILeakyRelu
      * This requires 2 scale operations (the two multiplications), one ReLU operations and an element wise addition
      */
 public:
-    ILayer* init(std::string name, INetworkDefinition* network, ITensor& input, float negSlope, DataType dt)
+    ILayer* operator()(std::string name, INetworkDefinition* network, ITensor& input, float negSlope, DataType dt)
     {
         const Weights default_weights{dt, nullptr, 0};
         Weights scales_1{dt, nullptr, 1};
@@ -258,7 +258,7 @@ private:
 class Conv2dBatchLeaky
 {
 public:
-    ILayer* init(std::string name, INetworkDefinition* network, WeightsLoader& weights, ITensor& input, int nbOutputMaps,
+    ILayer* operator()(std::string name, INetworkDefinition* network, WeightsLoader& weights, ITensor& input, int nbOutputMaps,
                     DimsHW kernelSize, DimsHW padding=DimsHW{1, 1}, DimsHW stride=DimsHW{1, 1}, float negSlope=0.1,
                     std::unique_ptr<ILeakyRelu> act_impl=std::unique_ptr<ILeakyRelu>(new LeakyReluPlugin))
     {
@@ -319,7 +319,7 @@ public:
         batchnorm->setName(std::string(name + "_bn").c_str());
 
         // activation layer
-        return m_activation->init(name, network, *batchnorm->getOutput(0), negSlope, weights.datatype);
+        return (*m_activation)(name, network, *batchnorm->getOutput(0), negSlope, weights.datatype);
     }
 
 private:
@@ -436,7 +436,7 @@ public:
         assert(norm);
 
         // Start of the network
-        ILayer* conv0 = m_convs[0].init("conv0", m_network, m_weights, *norm->getOutput(0), 32, DimsHW{3, 3});
+        ILayer* conv0 = m_convs[0]("conv0", m_network, m_weights, *norm->getOutput(0), 32, DimsHW{3, 3});
         assert(conv0);
 
         IPoolingLayer* pool0 = m_network->addPooling(*conv0->getOutput(0), PoolingType::kMAX, DimsHW{2, 2});
@@ -444,7 +444,7 @@ public:
         pool0->setStride(DimsHW{2, 2});
         pool0->setName("pool0");
 
-        ILayer* conv1 = m_convs[1].init("conv1", m_network, m_weights, *pool0->getOutput(0), 64, DimsHW{3, 3});
+        ILayer* conv1 = m_convs[1]("conv1", m_network, m_weights, *pool0->getOutput(0), 64, DimsHW{3, 3});
         assert(conv1);
 
         IPoolingLayer* pool1 = m_network->addPooling(*conv1->getOutput(0), PoolingType::kMAX, DimsHW{2, 2});
@@ -452,13 +452,13 @@ public:
         pool1->setStride(DimsHW{2, 2});
         pool1->setName("pool1");
 
-        ILayer* conv2 = m_convs[2].init("conv2", m_network, m_weights, *pool1->getOutput(0), 128, DimsHW{3, 3});
+        ILayer* conv2 = m_convs[2]("conv2", m_network, m_weights, *pool1->getOutput(0), 128, DimsHW{3, 3});
         assert(conv2);
 
-        ILayer* conv3 = m_convs[3].init("conv3", m_network, m_weights, *conv2->getOutput(0), 64, DimsHW{1, 1}, DimsHW{0, 0});
+        ILayer* conv3 = m_convs[3]("conv3", m_network, m_weights, *conv2->getOutput(0), 64, DimsHW{1, 1}, DimsHW{0, 0});
         assert(conv3);
 
-        ILayer* conv4 = m_convs[4].init("conv4", m_network, m_weights, *conv3->getOutput(0), 128, DimsHW{3, 3});
+        ILayer* conv4 = m_convs[4]("conv4", m_network, m_weights, *conv3->getOutput(0), 128, DimsHW{3, 3});
         assert(conv4);
 
         IPoolingLayer* pool2 = m_network->addPooling(*conv4->getOutput(0), PoolingType::kMAX, DimsHW{2, 2});
@@ -466,13 +466,13 @@ public:
         pool2->setStride(DimsHW{2, 2});
         pool2->setName("pool2");
 
-        ILayer* conv5 = m_convs[5].init("conv5", m_network, m_weights, *pool2->getOutput(0), 256, DimsHW{3, 3});
+        ILayer* conv5 = m_convs[5]("conv5", m_network, m_weights, *pool2->getOutput(0), 256, DimsHW{3, 3});
         assert(conv5);
 
-        ILayer* conv6 = m_convs[6].init("conv6", m_network, m_weights, *conv5->getOutput(0), 128, DimsHW{1, 1}, DimsHW{0, 0});
+        ILayer* conv6 = m_convs[6]("conv6", m_network, m_weights, *conv5->getOutput(0), 128, DimsHW{1, 1}, DimsHW{0, 0});
         assert(conv6);
 
-        ILayer* conv7 = m_convs[7].init("conv7", m_network, m_weights, *conv6->getOutput(0), 256, DimsHW{3, 3});
+        ILayer* conv7 = m_convs[7]("conv7", m_network, m_weights, *conv6->getOutput(0), 256, DimsHW{3, 3});
         assert(conv7);
 
         IPoolingLayer* pool3 = m_network->addPooling(*conv7->getOutput(0), PoolingType::kMAX, DimsHW{2, 2});
@@ -480,19 +480,19 @@ public:
         pool3->setStride(DimsHW{2, 2});
         pool3->setName("pool3");
 
-        ILayer* conv8 = m_convs[8].init("conv8", m_network, m_weights, *pool3->getOutput(0), 512, DimsHW{3, 3});
+        ILayer* conv8 = m_convs[8]("conv8", m_network, m_weights, *pool3->getOutput(0), 512, DimsHW{3, 3});
         assert(conv8);
 
-        ILayer* conv9 = m_convs[9].init("conv9", m_network, m_weights, *conv8->getOutput(0), 256, DimsHW{1, 1}, DimsHW{0, 0});
+        ILayer* conv9 = m_convs[9]("conv9", m_network, m_weights, *conv8->getOutput(0), 256, DimsHW{1, 1}, DimsHW{0, 0});
         assert(conv9);
 
-        ILayer* conv10 = m_convs[10].init("conv10", m_network, m_weights, *conv9->getOutput(0), 512, DimsHW{3, 3});
+        ILayer* conv10 = m_convs[10]("conv10", m_network, m_weights, *conv9->getOutput(0), 512, DimsHW{3, 3});
         assert(conv10);
 
-        ILayer* conv11 = m_convs[11].init("conv11", m_network, m_weights, *conv10->getOutput(0), 256, DimsHW{1, 1}, DimsHW{0, 0});
+        ILayer* conv11 = m_convs[11]("conv11", m_network, m_weights, *conv10->getOutput(0), 256, DimsHW{1, 1}, DimsHW{0, 0});
         assert(conv11);
 
-        ILayer* conv12 = m_convs[12].init("conv12", m_network, m_weights, *conv11->getOutput(0), 512, DimsHW{3, 3});
+        ILayer* conv12 = m_convs[12]("conv12", m_network, m_weights, *conv11->getOutput(0), 512, DimsHW{3, 3});
         assert(conv12);
 
         IPoolingLayer* pool4 = m_network->addPooling(*conv12->getOutput(0), PoolingType::kMAX, DimsHW{2, 2});
@@ -500,29 +500,29 @@ public:
         pool4->setStride(DimsHW{2, 2});
         pool4->setName("pool4");
 
-        ILayer* conv13 = m_convs[13].init("conv13", m_network, m_weights, *pool4->getOutput(0), 1024, DimsHW{3, 3});
+        ILayer* conv13 = m_convs[13]("conv13", m_network, m_weights, *pool4->getOutput(0), 1024, DimsHW{3, 3});
         assert(conv13);
 
-        ILayer* conv14 = m_convs[14].init("conv14", m_network, m_weights, *conv13->getOutput(0), 512, DimsHW{1, 1}, DimsHW{0, 0});
+        ILayer* conv14 = m_convs[14]("conv14", m_network, m_weights, *conv13->getOutput(0), 512, DimsHW{1, 1}, DimsHW{0, 0});
         assert(conv14);
 
-        ILayer* conv15 = m_convs[15].init("conv15", m_network, m_weights, *conv14->getOutput(0), 1024, DimsHW{3, 3});
+        ILayer* conv15 = m_convs[15]("conv15", m_network, m_weights, *conv14->getOutput(0), 1024, DimsHW{3, 3});
         assert(conv15);
 
-        ILayer* conv16 = m_convs[16].init("conv16", m_network, m_weights, *conv15->getOutput(0), 512, DimsHW{1, 1}, DimsHW{0, 0});
+        ILayer* conv16 = m_convs[16]("conv16", m_network, m_weights, *conv15->getOutput(0), 512, DimsHW{1, 1}, DimsHW{0, 0});
         assert(conv16);
 
-        ILayer* conv17 = m_convs[17].init("conv17", m_network, m_weights, *conv16->getOutput(0), 1024, DimsHW{3, 3});
+        ILayer* conv17 = m_convs[17]("conv17", m_network, m_weights, *conv16->getOutput(0), 1024, DimsHW{3, 3});
         assert(conv17);
 
-        ILayer* conv18 = m_convs[18].init("conv18", m_network, m_weights, *conv17->getOutput(0), 1024, DimsHW{3, 3});
+        ILayer* conv18 = m_convs[18]("conv18", m_network, m_weights, *conv17->getOutput(0), 1024, DimsHW{3, 3});
         assert(conv18);
 
-        ILayer* conv19 = m_convs[19].init("conv19", m_network, m_weights, *conv18->getOutput(0), 1024, DimsHW{3, 3});
+        ILayer* conv19 = m_convs[19]("conv19", m_network, m_weights, *conv18->getOutput(0), 1024, DimsHW{3, 3});
         assert(conv19);
 
         // Parallel branch (input from conv12)
-        ILayer* conv20 = m_convs[20].init("conv20", m_network, m_weights, *conv12->getOutput(0), 64, DimsHW{1, 1}, DimsHW{0, 0});
+        ILayer* conv20 = m_convs[20]("conv20", m_network, m_weights, *conv12->getOutput(0), 64, DimsHW{1, 1}, DimsHW{0, 0});
         assert(conv20);
 
         m_reorg_plugin = std::unique_ptr<::plugin::INvPlugin, decltype(nvPluginDeleter)>(plugin::createYOLOReorgPlugin(2),
@@ -540,7 +540,7 @@ public:
         assert(concat);
 
         const int conv21_num_filters = 1024;
-        ILayer* conv21 = m_convs[21].init("conv21", m_network, m_weights, *concat->getOutput(0), conv21_num_filters, DimsHW{3, 3});
+        ILayer* conv21 = m_convs[21]("conv21", m_network, m_weights, *concat->getOutput(0), conv21_num_filters, DimsHW{3, 3});
         assert(conv21);
 
         // last conv layer is convolution only (no batch norm, no activation)

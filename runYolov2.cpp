@@ -1,4 +1,5 @@
 #include <opencv2/opencv.hpp>
+#include <functional>
 #include <cassert>
 #include <chrono>
 #include "common.h"
@@ -156,24 +157,67 @@ bool read_names_file(std::vector<std::string>& names, std::string filename)
     return true;
 }
 
+class IPreProcessor
+{
+public:
+    /*
+     *  Called after the network is deserialized
+     *  engine:     containes the deserialized cuda engine
+     *  returns true on success, false on failure
+     */
+    virtual bool init(const ICudaEngine* engine) = 0;
+
+    /*
+     *  Actual pre-processing
+     *  images:         list of input images to preprocess. Length equals the batch size
+     *  input_blobs:    preprocessed image data that will be send to the network
+     *  returns true on success, false on failure
+     */
+    virtual bool operator()(const std::vector<cv::Mat>& images, std::map<int, std::vector<float>>& input_blobs) = 0;
+};
+
+class IPostPorcessor
+{
+public:
+    /*
+     *  Called after the network is deserialized
+     *  engine:         containes the deserialized cuda engine
+     *  returns true on success, false on failure
+     */
+    virtual bool init(const ICudaEngine* engine) = 0;
+
+    /*
+     *  Actual post-processing
+     *  output_blobs:   output data from the network that needs post-processing
+     *  images:         list of processed images that can be used to draw detection results onto
+     */
+    virtual bool operator()(const std::vector<cv::Mat>& images, const std::map<int, std::vector<float>>& output_blobs) = 0;
+};
+
 class InferModel
 {
 public:
 
-    InferModel(IPluginFactory* plugin_factory, size_t batch_size) :
+    InferModel(std::shared_ptr<IPluginFactory> plugin_factory,
+                std::shared_ptr<IPreProcessor> pre,
+                std::shared_ptr<IPostPorcessor> post,
+                std::shared_ptr<Logger> logger,
+                size_t batch_size) :
         m_plugin_factory(plugin_factory),
+        m_pre(pre),
+        m_post(post),
+        m_logger(logger),
         m_batch_size(batch_size) {}
 
     ~InferModel()
     {
         destroy_cuda_stream();
-        //TODO: validate that everything is cleaned
+        //TODO: validate that everything is cleaned with asan
     }
 
-    bool init(Logger* logger, std::string model_file)
+    bool init(std::string model_file)
     {
-        m_logger = logger;
-        m_runtime = createInferRuntime(*logger);
+        m_runtime = createInferRuntime(*m_logger);
 
         if (!m_runtime) {
             m_logger->log(ILogger::Severity::kERROR, "Failed to create infer runtime");
@@ -191,6 +235,16 @@ public:
             return false;
         }
 
+        if (!pre->init(m_cuda_engine)) {
+            m_logger->log(ILogger::Severity::kERROR, "Init of pre-processing failed");
+            return false;
+        }
+
+        if (!post->init(m_cuda_engine)) {
+            m_logger->log(ILogger::Severity::kERROR, "Init of post-processing failed");
+            return false;
+        }
+
         if (get_context() == nullptr) {
             m_logger->log(ILogger::Severity::kERROR, "Failed to get execution context");
             return false;
@@ -199,40 +253,23 @@ public:
         create_io_blobs();
         create_cuda_stream();
 
-        if (!init_custom()) {
-            m_logger->log(ILogger::Severity::kERROR, "Custom initialization failed");
-            return false;
-        }
-
         return true;
     }
-
-    /*
-     *  Optional custom initialization after network is fully deployed
-     *  Can be usefull to init the pre/postprocessing
-     */
-    virtual bool init_custom()
-    {
-        return true;
-    }
-
-    /*
-     *  Custom preprocessing
-     */
-    virtual bool preprocess(const std::vector<cv::Mat>& images, std::map<int, std::vector<float>>& input_blobs) = 0;
-
-    /*
-     *  Custom postprocessing
-     */
-    virtual bool postprocess(const std::vector<cv::Mat>& images, const std::map<int, std::vector<float>>& output_blobs) = 0;
 
     /*
      *  Run a set of images through the network. The number of images must be <= max batch size
      */
-    virtual bool run(std::vector<cv::Mat> images)
+    bool run(std::vector<cv::Mat> images)
     {
+        // sanity check on input
+        if (images.size() > m_batch_size) {
+            m_logger->log(ILogger::Severity::kERROR, "Number images (" + std::to_string(images.size()) +
+                          ") must be smaller or equal to set batch size (" + std::to_string(m_batch_size) + ")");
+            return false;
+        }
+
         start();
-        if (!preprocess(images, m_input_blobs)) {
+        if (!(*m_pre)(images, m_input_blobs)) {
             m_logger->log(ILogger::Severity::kERROR, "Preprocess failed");
             return false;
         }
@@ -246,7 +283,7 @@ public:
         stop();
 
         start();
-        if (!postprocess(images, m_output_blobs)) {
+        if (!(*m_post)(images, m_output_blobs)) {
             m_logger->log(ILogger::Severity::kERROR, "Postprocess failed");
             return false;
         }
@@ -257,15 +294,6 @@ public:
     }
 
 private:
-    IPluginFactory* m_plugin_factory;
-
-protected:
-    size_t m_batch_size;
-    Logger* m_logger = nullptr;
-    ICudaEngine* m_cuda_engine = nullptr;
-
-private:
-
     ICudaEngine* deserialize(const void* data, size_t length)
     {
         m_cuda_engine = m_runtime->deserializeCudaEngine(data, length, m_plugin_factory);
@@ -356,6 +384,13 @@ private:
         return true;
     }
 
+    std::shared_ptr<IPluginFactory> m_plugin_factory;
+    std::shared_ptr<IPreProcessor> m_pre;
+    std::shared_ptr<IPostProcessor> m_post;
+    std::shared_ptr<Logger> m_logger;
+    size_t m_batch_size;
+
+    ICudaEngine* m_cuda_engine = nullptr;
     IRuntime* m_runtime = nullptr;
     IExecutionContext* m_context = nullptr;
     std::vector<void*> m_cuda_buffers;
@@ -363,6 +398,320 @@ private:
 
     std::map<int, std::vector<float>> m_input_blobs;
     std::map<int, std::vector<float>> m_output_blobs;
+};
+
+class Bgr8LetterBoxPreProcessor : public IPreProcessor
+{
+public:
+    Bgr8LetterBoxPreProcessor(std::string input_blob_name,
+                              std::shared_ptr<Logger> logger) :
+        m_input_blob_name(input_blob_name),
+        m_logger(logger) {}
+
+    bool init(const ICudaEngine* engine)
+    {
+        Dims network_input_dims;
+
+        m_input_blob_index = engine->getBindingIndex(m_input_blob_name);
+        network_input_dims = engine->getBindingDimensions(m_input_blob_index);
+        // input tensor CHW order
+        m_net_in_c = network_input_dims.d[0];
+        m_net_in_h = network_input_dims.d[1];
+        m_net_in_w = network_input_dims.d[2];
+        m_in_row_step = m_net_in_w;
+        m_in_channel_step = m_net_in_w * m_net_in_h;
+        m_in_batch_step = m_net_in_w * m_net_in_h * m_net_in_c;
+        m_image_resized = cv::Mat(m_net_in_h, m_net_in_w, CV_8UC3);
+
+        return true;
+    }
+
+    bool operator()(const std::vector<cv::Mat>& images, std::map<int, std::vector<float>>& input_blobs)
+    {
+        // fill all batches of the input blob
+        float* data = input_blobs[m_input_blob_index].data();
+        for (size_t i=0; i<images.size(); i++) {
+            if (!bgr8_to_tensor_data(images[i], &data[i * m_in_batch_step]))
+                return false;
+        }
+
+        return true;
+    }
+
+private:
+
+    bool bgr8_to_tensor_data(const cv::Mat& input, float* output)
+    {
+        const int in_width = input.cols;
+        const int in_height = input.rows;
+        const cv::Scalar border_color = cv::Scalar(127, 127, 127);
+        cv::Mat image = input;
+        cv::Rect rect_image, rect_greyborder1, rect_greyborder2;
+        cv::Mat roi_image, roi_greyborder1, roi_greyborder2;
+
+        if (input.channels() != m_net_in_c) {
+            m_logger->log(ILogger::Severity::kERROR, "Number of image channels (" + std::to_string(input.channels()) +
+                          ") does not match number of network input channels (" + std::to_string(m_net_in_c) + ")");
+            return false;
+        }
+
+        // if image does not fit network input resolution, resize first but keep aspect ratio using letter boxing
+        if (in_width != m_net_in_w || in_height != m_net_in_h) {
+
+            // if aspect ratio differs, use letterboxing, else just resize
+            if (in_height * m_net_in_w != in_width * m_net_in_h) {
+
+                // calculate rectangles for letterboxing
+                if (in_height * m_net_in_w < in_width * m_net_in_h) {
+                    const int image_h = (in_height * m_net_in_w) / in_width;
+                    const int border_h = (m_net_in_h - image_h) / 2;
+                    rect_image = cv::Rect(0, border_h, m_net_in_w, image_h);
+                    rect_greyborder1 = cv::Rect(0, 0, m_net_in_w, border_h);
+                    rect_greyborder2 = cv::Rect(0, (m_net_in_h + image_h) / 2, m_net_in_w, border_h);
+                } else {
+                    const int image_w = (in_width * m_net_in_h) / in_height;
+                    const int border_w = (m_net_in_w - image_w) / 2;
+                    rect_image = cv::Rect(border_w, 0, image_w, m_net_in_h);
+                    rect_greyborder1 = cv::Rect(0, 0, border_w, m_net_in_h);
+                    rect_greyborder2 = cv::Rect((m_net_in_w + image_w) / 2, 0, border_w, m_net_in_h);
+                }
+
+                roi_image = cv::Mat(m_image_resized, rect_image);               // image area
+                roi_greyborder1 = cv::Mat(m_image_resized, rect_greyborder1);   // grey area top/left
+                roi_greyborder2 = cv::Mat(m_image_resized, rect_greyborder2);   // grey area bottom/right
+
+                // paint borders grey
+                roi_greyborder1 = border_color;
+                roi_greyborder2 = border_color;
+
+            } else {
+                // only resize
+                roi_image = m_image_resized;
+            }
+
+            // resize
+            cv::resize(input, roi_image, roi_image.size());
+            image = m_image_resized;
+        }
+
+#if 1
+        /* colorconvert (BGRBGRBGR... -> RRR...GGG...BBB...) and convert uint8 to float pixel-wise in one go */
+        // assume normalization is done by the network arch
+        for (int c=0; c<m_net_in_c; ++c) {
+            for (int row=0; row<m_net_in_h; ++row) {
+                for (int col=0; col<m_net_in_w; ++col) {
+                    const size_t index = col + row*m_in_row_step + c*m_in_channel_step;
+                    output[index] = static_cast<float>(image.at<cv::Vec3b>(row, col)[2 - c]);
+                }
+            }
+        }
+#else
+        std::ifstream infile("/home/maarten/code/darknet_eavise/input_tensor.txt");
+        size_t index = 0;
+        std::string number_string;
+        while (std::getline(infile, number_string)) {
+            output[index] = std::stof(number_string) * 255.0;
+            index++;
+        }
+#endif
+
+        return true;
+    }
+
+    std::string m_input_blob_name;
+    std::shared_ptr<Logger> m_logger;
+
+    int m_input_blob_index;
+    int m_net_in_w;
+    int m_net_in_h;
+    int m_net_in_c;
+
+    int m_in_row_step;
+    int m_in_channel_step;
+    int m_in_batch_step;
+
+    cv::Mat m_image_resized;
+};
+
+class Yolov2PostProcessor : public IPostPorcessor
+{
+public:
+    struct Detection
+    {
+        cv::Rect2f bbox;
+        int class_label_index;
+        float probability;
+    };
+
+    typedef std::function<bool(const cv::Mat&, const std::vector<Detection>&)> CbFunction;
+
+    Yolov2PostProcessor(std::string input_blob_name,
+                        std::string output_blob_name,
+                        float thresh,
+                        float nms_thresh,
+                        std::vector<std::string> class_names,
+                        std::vector<float> anchor_priors,
+                        std::shared_ptr<Yolov2PluginFactory> yolov2_plugin_factory,
+                        std::shared_ptr<Logger> logger,
+                        CbFunction cb) :
+        m_input_blob_name(input_blob_name),
+        m_output_blob_name(output_blob_name),
+        m_thresh(thresh),
+        m_nms_thresh(nms_thresh),
+        m_class_names(class_names),
+        m_anchor_priors(anchor_priors),
+        m_yolov2_plugin_factory(yolov2_plugin_factory),
+        m_logger(logger),
+        m_cb(cb) {}
+
+    bool init(const ICudaEngine* engine)
+    {
+        Dims network_input_dims;
+        Dims network_output_dims;
+
+        m_input_blob_index = engine->getBindingIndex(m_input_blob_name);
+        network_input_dims = engine->getBindingDimensions(m_input_blob_index);
+        m_output_blob_index = engine->getBindingIndex(m_output_blob_name);
+        network_output_dims = engine->getBindingDimensions(m_output_blob_index);
+        // CHW order
+        m_net_out_h = network_output_dims.d[1];
+        m_net_out_w = network_output_dims.d[2];
+        m_out_row_step = m_net_out_w;
+        m_out_channel_step = m_net_out_w * m_net_out_h;
+        m_out_batch_step = m_net_out_w * m_net_out_h * network_output_dims.d[0];
+
+        ::plugin::RegionParameters params;
+        if (!m_yolov2_plugin_factory.get_region_params(0, params))
+            return false;
+
+        m_net_anchors = params.num;
+        m_net_coords = params.coords;
+        m_net_classes = params.classes;
+
+        // validate number of anchor priors
+        if (m_net_anchors * 2U != m_anchor_priors.size()) {
+            m_logger->log(ILogger::Severity::kERROR, "Network has " + std::to_string(m_net_anchors) + " anchors, expecting " +
+                          std::to_string(m_net_anchors * 2) + " anchor priors, but got " + std::to_string(m_anchor_priors.size()));
+            return false;
+        }
+    }
+
+    bool operator()(const std::vector<cv::Mat>& images, const std::map<int, std::vector<float>>& output_blobs)
+    {
+    }
+
+private:
+    void get_region_detections(const float* input, int image_w, int image_h, std::vector<Detection>& detections)
+    {
+        int x, y, anchor, cls;
+        int new_w=0;
+        int new_h=0;
+
+        // calculate image width/height that the image must have to fit the network while keeping the aspect ratio fixed
+        if ((m_net_in_w * image_h) < (m_net_in_h * image_w)) {
+            new_w = m_net_in_w;
+            new_h = (image_h * m_net_in_w)/image_w;
+        } else {
+            new_h = m_net_in_h;
+            new_w = (image_w * m_net_in_h)/image_h;
+        }
+
+        for (anchor=0; anchor<m_net_anchors; ++anchor) {
+            const int anchor_index = anchor * m_out_channel_step * (1 + m_net_coords + m_net_classes);
+            for (y=0; y<m_net_out_h; ++y) {
+                const int row_index = y * m_out_row_step + anchor_index;
+                for (x=0; x<m_net_out_w; ++x) {
+                    const int index = x + row_index;
+
+                    // extract objectness
+                    const float objectness = input[index + m_net_coords * m_out_channel_step];
+
+                    // extract class probs if objectness > threshold
+                    if (objectness > m_thresh) {
+                        Detection detection;
+
+                        // extract box
+                        detection.bbox.x = (x + input[index]) / m_net_out_w;
+                        detection.bbox.y = (y + input[index + m_out_channel_step]) / m_net_out_h;
+                        detection.bbox.width = exp(input[index + 2 * m_out_channel_step]) * m_anchor_priors[2 * anchor] / m_net_out_w;
+                        detection.bbox.height = exp(input[index + 3 * m_out_channel_step]) * m_anchor_priors[2 * anchor + 1] / m_net_out_h;
+
+                        // transform bbox network coords to input image coordinates
+                        // TODO: reformulate using less divisions
+                        detection.bbox.x = (detection.bbox.x - (m_net_in_w - new_w)/2./m_net_in_w) / (new_w / static_cast<float>(m_net_in_w)) * image_w;
+                        detection.bbox.y = (detection.bbox.y - (m_net_in_h - new_h)/2./m_net_in_h) / (new_h / static_cast<float>(m_net_in_h)) * image_h;
+                        detection.bbox.width  *= m_net_in_w / static_cast<float>(new_w) * image_w;
+                        detection.bbox.height *= m_net_in_h / static_cast<float>(new_h) * image_h;
+
+                        // extract class label and prob of highest class prob
+                        detection.probability = 0;
+                        for (cls=0; cls < m_net_classes; ++cls) {
+                            float prob = objectness * input[index + (1 + m_net_coords + cls) * m_out_channel_step];
+                            if (prob > m_thresh && prob > detection.probability) {
+                                detection.class_label_index = cls;
+                                detection.probability = prob;
+                            }
+                        }
+                        detections.push_back(detection);
+                    }
+                }
+            }
+        }
+    }
+
+    float box_iou(cv::Rect2f a, cv::Rect2f b)
+    {
+        const cv::Rect2f intersection = a & b;
+        const float intersection_area = intersection.area();
+        const float union_area = a.area() + b.area() - intersection_area;
+
+        return intersection_area / union_area;
+    }
+
+    void do_nms(std::vector<Detection>& detections, float thresh)
+    {
+        size_t i, j;
+
+        // suppress by setting detection probability to zero
+        for (i = 0; i < detections.size(); ++i) {
+            for (j = i+1; j < detections.size(); ++j) {
+                if (box_iou(detections[i].bbox, detections[j].bbox) > thresh &&
+                    detections[i].class_label_index == detections[j].class_label_index) {
+                    if (detections[i].probability < detections[j].probability)
+                        detections[i].probability = 0;
+                    else
+                        detections[j].probability = 0;
+                }
+            }
+        }
+
+        // delete suppressed detections
+        for (i=detections.size()-1; i < detections.size(); --i) {
+            if (detections[i].probability == 0)
+                detections.erase(detections.begin() + i);
+        }
+    }
+
+    std::string m_input_blob_name;
+    std::string m_output_blob_name;
+    float m_thresh;
+    float m_nms_thresh;
+    std::vector<std::string> m_class_names;
+    std::vector<float> m_anchor_priors;
+    std::shared_ptr<Yolov2PluginFactory> m_yolov2_plugin_factory;
+    std::shared_ptr<Logger> m_logger;
+    CbFunction m_cb;
+
+    int m_output_blob_index;
+    int m_net_out_w;
+    int m_net_out_h;
+    int m_net_coords;
+    int m_net_anchors;
+    int m_net_classes;
+
+    int m_out_row_step;
+    int m_out_channel_step;
+    int m_out_batch_step;
 };
 
 class Yolov2InferModel : public InferModel
