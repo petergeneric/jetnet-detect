@@ -166,7 +166,7 @@ private:
 class ILeakyRelu
 {
 public:
-    virtual ILayer* init(std::string name, INetworkDefinition* network, ITensor& input, float negSlope, DataType dt) = 0;
+    virtual ILayer* operator()(std::string name, INetworkDefinition* network, ITensor& input, float negSlope, DataType dt) = 0;
 };
 
 class LeakyReluPlugin : public ILeakyRelu
@@ -260,7 +260,7 @@ class Conv2dBatchLeaky
 public:
     ILayer* operator()(std::string name, INetworkDefinition* network, WeightsLoader& weights, ITensor& input, int nbOutputMaps,
                     DimsHW kernelSize, DimsHW padding=DimsHW{1, 1}, DimsHW stride=DimsHW{1, 1}, float negSlope=0.1,
-                    std::unique_ptr<ILeakyRelu> act_impl=std::unique_ptr<ILeakyRelu>(new LeakyReluPlugin))
+                    std::unique_ptr<ILeakyRelu> act_impl=std::unique_ptr<ILeakyRelu>(new LeakyReluPlugin()))
     {
         Dims input_dim = input.getDimensions();
         const Weights default_weights{weights.datatype, nullptr, 0};

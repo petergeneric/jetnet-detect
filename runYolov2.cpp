@@ -8,8 +8,6 @@
 
 using namespace nvinfer1;
 
-static Logger gLogger(ILogger::Severity::kINFO);
-
 #define BATCH_SIZE          1
 #define INPUT_BLOB_NAME     "data"
 #define OUTPUT_BLOB_NAME    "probs"
@@ -61,6 +59,9 @@ int save_tensor(const float* data, size_t size, const char* filename)
 class Yolov2PluginFactory : public IPluginFactory
 {
 public:
+    Yolov2PluginFactory(std::shared_ptr<Logger> logger) :
+        m_logger(logger) {}
+
     /*
      *  Overload from IPluginFactory
      */
@@ -68,7 +69,7 @@ public:
     {
         ::plugin::RegionParameters params;
 
-        gLogger.log(ILogger::Severity::kINFO, "Plugin factory creating: " + std::string(layerName));
+        m_logger->log(ILogger::Severity::kINFO, "Plugin factory creating: " + std::string(layerName));
         if (strstr(layerName, "PReLU")) {
             auto prelu_plugin = std::unique_ptr<::plugin::INvPlugin, decltype(nvPluginDeleter)>(
                                             ::plugin::createPReLUPlugin(serialData, serialLength), nvPluginDeleter);
@@ -99,7 +100,7 @@ public:
             return ref;
         }
 
-        gLogger.log(ILogger::Severity::kERROR, "Do not know how to create plugin " + std::string(layerName));
+        m_logger->log(ILogger::Severity::kERROR, "Do not know how to create plugin " + std::string(layerName));
         return nullptr;
     }
 
@@ -117,6 +118,7 @@ public:
     }
 
 private:
+    std::shared_ptr<Logger> m_logger;
     void(*nvPluginDeleter)(::plugin::INvPlugin*) { [](::plugin::INvPlugin* ptr) {ptr->destroy();} };
     std::vector<std::unique_ptr<::plugin::INvPlugin, decltype(nvPluginDeleter)>> m_prelu_plugins;
     std::vector<std::unique_ptr<::plugin::INvPlugin, decltype(nvPluginDeleter)>> m_reorg_plugins;
@@ -176,7 +178,7 @@ public:
     virtual bool operator()(const std::vector<cv::Mat>& images, std::map<int, std::vector<float>>& input_blobs) = 0;
 };
 
-class IPostPorcessor
+class IPostProcessor
 {
 public:
     /*
@@ -200,7 +202,7 @@ public:
 
     InferModel(std::shared_ptr<IPluginFactory> plugin_factory,
                 std::shared_ptr<IPreProcessor> pre,
-                std::shared_ptr<IPostPorcessor> post,
+                std::shared_ptr<IPostProcessor> post,
                 std::shared_ptr<Logger> logger,
                 size_t batch_size) :
         m_plugin_factory(plugin_factory),
@@ -235,12 +237,12 @@ public:
             return false;
         }
 
-        if (!pre->init(m_cuda_engine)) {
+        if (!m_pre->init(m_cuda_engine)) {
             m_logger->log(ILogger::Severity::kERROR, "Init of pre-processing failed");
             return false;
         }
 
-        if (!post->init(m_cuda_engine)) {
+        if (!m_post->init(m_cuda_engine)) {
             m_logger->log(ILogger::Severity::kERROR, "Init of post-processing failed");
             return false;
         }
@@ -296,7 +298,7 @@ public:
 private:
     ICudaEngine* deserialize(const void* data, size_t length)
     {
-        m_cuda_engine = m_runtime->deserializeCudaEngine(data, length, m_plugin_factory);
+        m_cuda_engine = m_runtime->deserializeCudaEngine(data, length, m_plugin_factory.get());
         return m_cuda_engine;
     }
 
@@ -412,7 +414,7 @@ public:
     {
         Dims network_input_dims;
 
-        m_input_blob_index = engine->getBindingIndex(m_input_blob_name);
+        m_input_blob_index = engine->getBindingIndex(m_input_blob_name.c_str());
         network_input_dims = engine->getBindingDimensions(m_input_blob_index);
         // input tensor CHW order
         m_net_in_c = network_input_dims.d[0];
@@ -533,60 +535,110 @@ private:
     cv::Mat m_image_resized;
 };
 
-class Yolov2PostProcessor : public IPostPorcessor
+struct Detection
+{
+    cv::Rect2f bbox;
+    int class_label_index;
+    std::string class_label;
+    float probability;
+};
+
+float box_iou(cv::Rect2f a, cv::Rect2f b)
+{
+    const cv::Rect2f intersection = a & b;
+    const float intersection_area = intersection.area();
+    const float union_area = a.area() + b.area() - intersection_area;
+
+    return intersection_area / union_area;
+}
+
+typedef std::function<void(std::vector<Detection>&)> NmsFunction;
+
+void nms(std::vector<Detection>& detections, float thresh)
+{
+    size_t i, j;
+
+    // suppress by setting detection probability to zero
+    for (i = 0; i < detections.size(); ++i) {
+        for (j = i+1; j < detections.size(); ++j) {
+            if (box_iou(detections[i].bbox, detections[j].bbox) > thresh &&
+                detections[i].class_label_index == detections[j].class_label_index) {
+                if (detections[i].probability < detections[j].probability)
+                    detections[i].probability = 0;
+                else
+                    detections[j].probability = 0;
+            }
+        }
+    }
+
+    // delete suppressed detections
+    for (i=detections.size()-1; i < detections.size(); --i) {
+        if (detections[i].probability == 0)
+            detections.erase(detections.begin() + i);
+    }
+}
+
+class Yolov2PostProcessor : public IPostProcessor
 {
 public:
-    struct Detection
-    {
-        cv::Rect2f bbox;
-        int class_label_index;
-        float probability;
-    };
-
     typedef std::function<bool(const cv::Mat&, const std::vector<Detection>&)> CbFunction;
 
     Yolov2PostProcessor(std::string input_blob_name,
                         std::string output_blob_name,
                         float thresh,
-                        float nms_thresh,
                         std::vector<std::string> class_names,
                         std::vector<float> anchor_priors,
                         std::shared_ptr<Yolov2PluginFactory> yolov2_plugin_factory,
                         std::shared_ptr<Logger> logger,
-                        CbFunction cb) :
+                        CbFunction cb,
+                        NmsFunction nms) :
         m_input_blob_name(input_blob_name),
         m_output_blob_name(output_blob_name),
         m_thresh(thresh),
-        m_nms_thresh(nms_thresh),
         m_class_names(class_names),
         m_anchor_priors(anchor_priors),
         m_yolov2_plugin_factory(yolov2_plugin_factory),
         m_logger(logger),
-        m_cb(cb) {}
+        m_cb(cb),
+        m_nms(nms) {}
 
     bool init(const ICudaEngine* engine)
     {
         Dims network_input_dims;
         Dims network_output_dims;
 
-        m_input_blob_index = engine->getBindingIndex(m_input_blob_name);
-        network_input_dims = engine->getBindingDimensions(m_input_blob_index);
-        m_output_blob_index = engine->getBindingIndex(m_output_blob_name);
+        network_input_dims = engine->getBindingDimensions(engine->getBindingIndex(m_input_blob_name.c_str()));
+        // CHW order
+        m_net_in_w = network_input_dims.d[2];
+        m_net_in_h = network_input_dims.d[1];
+
+        m_output_blob_index = engine->getBindingIndex(m_output_blob_name.c_str());
         network_output_dims = engine->getBindingDimensions(m_output_blob_index);
         // CHW order
         m_net_out_h = network_output_dims.d[1];
         m_net_out_w = network_output_dims.d[2];
+
         m_out_row_step = m_net_out_w;
         m_out_channel_step = m_net_out_w * m_net_out_h;
         m_out_batch_step = m_net_out_w * m_net_out_h * network_output_dims.d[0];
 
+        //TODO: lose dependency towards yolov2 plugin factory and get the params by
+        //calling serialize(buffer) method on the last plugin to get the anchor, coords and class nums
         ::plugin::RegionParameters params;
-        if (!m_yolov2_plugin_factory.get_region_params(0, params))
+        if (!m_yolov2_plugin_factory->get_region_params(0, params))
             return false;
 
         m_net_anchors = params.num;
         m_net_coords = params.coords;
         m_net_classes = params.classes;
+
+        // validate number of labels
+        if (m_class_names.size() != static_cast<size_t>(m_net_classes)) {
+            m_logger->log(ILogger::Severity::kERROR, "Network produces " + std::to_string(m_net_classes) +
+                          " class probabilities but class names list contains " + std::to_string(m_class_names.size()) +
+                          " class labels. These must be equal in size");
+            return false;
+        }
 
         // validate number of anchor priors
         if (m_net_anchors * 2U != m_anchor_priors.size()) {
@@ -594,10 +646,28 @@ public:
                           std::to_string(m_net_anchors * 2) + " anchor priors, but got " + std::to_string(m_anchor_priors.size()));
             return false;
         }
+
+        return true;
     }
 
     bool operator()(const std::vector<cv::Mat>& images, const std::map<int, std::vector<float>>& output_blobs)
     {
+        const float* output = output_blobs.at(m_output_blob_index).data();
+
+        for (size_t i=0; i<images.size(); i++) {
+            std::vector<Detection> detections;
+            get_region_detections(&output[i * m_out_batch_step], images[i].cols, images[i].rows, detections);
+
+            if (m_nms)
+                m_nms(detections);
+
+            if (m_cb && !m_cb(images[i], detections)) {
+                m_logger->log(ILogger::Severity::kERROR, "Post-processing callback failed");
+                return false;
+            }
+        }
+
+        return true;
     }
 
 private:
@@ -627,454 +697,129 @@ private:
                     const float objectness = input[index + m_net_coords * m_out_channel_step];
 
                     // extract class probs if objectness > threshold
-                    if (objectness > m_thresh) {
-                        Detection detection;
+                    if (objectness <= m_thresh)
+                        continue;
 
-                        // extract box
-                        detection.bbox.x = (x + input[index]) / m_net_out_w;
-                        detection.bbox.y = (y + input[index + m_out_channel_step]) / m_net_out_h;
-                        detection.bbox.width = exp(input[index + 2 * m_out_channel_step]) * m_anchor_priors[2 * anchor] / m_net_out_w;
-                        detection.bbox.height = exp(input[index + 3 * m_out_channel_step]) * m_anchor_priors[2 * anchor + 1] / m_net_out_h;
+                    Detection detection;
 
-                        // transform bbox network coords to input image coordinates
-                        // TODO: reformulate using less divisions
-                        detection.bbox.x = (detection.bbox.x - (m_net_in_w - new_w)/2./m_net_in_w) / (new_w / static_cast<float>(m_net_in_w)) * image_w;
-                        detection.bbox.y = (detection.bbox.y - (m_net_in_h - new_h)/2./m_net_in_h) / (new_h / static_cast<float>(m_net_in_h)) * image_h;
-                        detection.bbox.width  *= m_net_in_w / static_cast<float>(new_w) * image_w;
-                        detection.bbox.height *= m_net_in_h / static_cast<float>(new_h) * image_h;
+                    // extract box
+                    detection.bbox.x = (x + input[index]) / m_net_out_w;
+                    detection.bbox.y = (y + input[index + m_out_channel_step]) / m_net_out_h;
+                    detection.bbox.width = exp(input[index + 2 * m_out_channel_step]) * m_anchor_priors[2 * anchor] / m_net_out_w;
+                    detection.bbox.height = exp(input[index + 3 * m_out_channel_step]) * m_anchor_priors[2 * anchor + 1] / m_net_out_h;
 
-                        // extract class label and prob of highest class prob
-                        detection.probability = 0;
-                        for (cls=0; cls < m_net_classes; ++cls) {
-                            float prob = objectness * input[index + (1 + m_net_coords + cls) * m_out_channel_step];
-                            if (prob > m_thresh && prob > detection.probability) {
-                                detection.class_label_index = cls;
-                                detection.probability = prob;
-                            }
+                    // transform bbox network coords to input image coordinates
+                    // TODO: reformulate using less divisions
+                    detection.bbox.x = (detection.bbox.x - (m_net_in_w - new_w)/2./m_net_in_w) / (new_w / static_cast<float>(m_net_in_w)) * image_w;
+                    detection.bbox.y = (detection.bbox.y - (m_net_in_h - new_h)/2./m_net_in_h) / (new_h / static_cast<float>(m_net_in_h)) * image_h;
+                    detection.bbox.width  *= m_net_in_w / static_cast<float>(new_w) * image_w;
+                    detection.bbox.height *= m_net_in_h / static_cast<float>(new_h) * image_h;
+
+                    // extract class label and prob of highest class prob
+                    detection.probability = 0;
+                    for (cls=0; cls < m_net_classes; ++cls) {
+                        float prob = objectness * input[index + (1 + m_net_coords + cls) * m_out_channel_step];
+                        if (prob > m_thresh && prob > detection.probability) {
+                            detection.class_label_index = cls;
+                            detection.class_label = m_class_names[cls];
+                            detection.probability = prob;
                         }
-                        detections.push_back(detection);
                     }
+
+                    detections.push_back(detection);
                 }
             }
-        }
-    }
-
-    float box_iou(cv::Rect2f a, cv::Rect2f b)
-    {
-        const cv::Rect2f intersection = a & b;
-        const float intersection_area = intersection.area();
-        const float union_area = a.area() + b.area() - intersection_area;
-
-        return intersection_area / union_area;
-    }
-
-    void do_nms(std::vector<Detection>& detections, float thresh)
-    {
-        size_t i, j;
-
-        // suppress by setting detection probability to zero
-        for (i = 0; i < detections.size(); ++i) {
-            for (j = i+1; j < detections.size(); ++j) {
-                if (box_iou(detections[i].bbox, detections[j].bbox) > thresh &&
-                    detections[i].class_label_index == detections[j].class_label_index) {
-                    if (detections[i].probability < detections[j].probability)
-                        detections[i].probability = 0;
-                    else
-                        detections[j].probability = 0;
-                }
-            }
-        }
-
-        // delete suppressed detections
-        for (i=detections.size()-1; i < detections.size(); --i) {
-            if (detections[i].probability == 0)
-                detections.erase(detections.begin() + i);
         }
     }
 
     std::string m_input_blob_name;
     std::string m_output_blob_name;
     float m_thresh;
-    float m_nms_thresh;
     std::vector<std::string> m_class_names;
     std::vector<float> m_anchor_priors;
     std::shared_ptr<Yolov2PluginFactory> m_yolov2_plugin_factory;
     std::shared_ptr<Logger> m_logger;
     CbFunction m_cb;
+    NmsFunction m_nms;
 
     int m_output_blob_index;
-    int m_net_out_w;
-    int m_net_out_h;
-    int m_net_coords;
-    int m_net_anchors;
-    int m_net_classes;
-
-    int m_out_row_step;
-    int m_out_channel_step;
-    int m_out_batch_step;
-};
-
-class Yolov2InferModel : public InferModel
-{
-public:
-    Yolov2InferModel(int batch_size, float thresh, float nms_thresh, std::vector<std::string> class_names,
-                     std::vector<float> anchor_priors) :
-        InferModel(&m_yolov2_plugin_factory, batch_size),
-        m_thresh(thresh),
-        m_nms_thresh(nms_thresh),
-        m_class_names(class_names),
-        m_anchor_priors(anchor_priors)
-    {}
-
-    struct Detection
-    {
-        cv::Rect2f bbox;
-        int class_label_index;
-        float probability;
-    };
-
-    // input dimensions may vary
-    // output dimensions are fixed
-    // output is already allocated
-    bool bgr8_to_tensor_data(const cv::Mat& input, float* output)
-    {
-        const int in_width = input.cols;
-        const int in_height = input.rows;
-        const cv::Scalar border_color = cv::Scalar(127, 127, 127);
-        cv::Mat image = input;
-        cv::Rect rect_image, rect_greyborder1, rect_greyborder2;
-        cv::Mat roi_image, roi_greyborder1, roi_greyborder2;
-
-        if (input.channels() != m_net_in_c) {
-            m_logger->log(ILogger::Severity::kERROR, "Number of image channels (" + std::to_string(input.channels()) +
-                          ") does not match number of network input channels (" + std::to_string(m_net_in_c) + ")");
-            return false;
-        }
-
-        // if image does not fit network input resolution, resize first but keep aspect ratio using letter boxing
-        if (in_width != m_net_in_w || in_height != m_net_in_h) {
-
-            // if aspect ratio differs, use letterboxing, else just resize
-            if (in_height * m_net_in_w != in_width * m_net_in_h) {
-
-                // calculate rectangles for letterboxing
-                if (in_height * m_net_in_w < in_width * m_net_in_h) {
-                    const int image_h = (in_height * m_net_in_w) / in_width;
-                    const int border_h = (m_net_in_h - image_h) / 2;
-                    rect_image = cv::Rect(0, border_h, m_net_in_w, image_h);
-                    rect_greyborder1 = cv::Rect(0, 0, m_net_in_w, border_h);
-                    rect_greyborder2 = cv::Rect(0, (m_net_in_h + image_h) / 2, m_net_in_w, border_h);
-                } else {
-                    const int image_w = (in_width * m_net_in_h) / in_height;
-                    const int border_w = (m_net_in_w - image_w) / 2;
-                    rect_image = cv::Rect(border_w, 0, image_w, m_net_in_h);
-                    rect_greyborder1 = cv::Rect(0, 0, border_w, m_net_in_h);
-                    rect_greyborder2 = cv::Rect((m_net_in_w + image_w) / 2, 0, border_w, m_net_in_h);
-                }
-
-                roi_image = cv::Mat(m_image_resized, rect_image);               // image area
-                roi_greyborder1 = cv::Mat(m_image_resized, rect_greyborder1);   // grey area top/left
-                roi_greyborder2 = cv::Mat(m_image_resized, rect_greyborder2);   // grey area bottom/right
-
-                // paint borders grey
-                roi_greyborder1 = border_color;
-                roi_greyborder2 = border_color;
-
-            } else {
-                // only resize
-                roi_image = m_image_resized;
-            }
-
-            // resize
-            cv::resize(input, roi_image, roi_image.size());
-            image = m_image_resized;
-        }
-
-#if 1
-        /* colorconvert (BGRBGRBGR... -> RRR...GGG...BBB...) and convert uint8 to float pixel-wise in one go */
-        // assume normalization is done by the network arch
-        for (int c=0; c<m_net_in_c; ++c) {
-            for (int row=0; row<m_net_in_h; ++row) {
-                for (int col=0; col<m_net_in_w; ++col) {
-                    const size_t index = col + row*m_in_row_step + c*m_in_channel_step;
-                    output[index] = static_cast<float>(image.at<cv::Vec3b>(row, col)[2 - c]);
-                }
-            }
-        }
-#else
-        std::ifstream infile("/home/maarten/code/darknet_eavise/input_tensor.txt");
-        size_t index = 0;
-        std::string number_string;
-        while (std::getline(infile, number_string)) {
-            output[index] = std::stof(number_string) * 255.0;
-            index++;
-        }
-#endif
-
-        return true;
-    }
-
-    // called when network is fully deployed
-    virtual bool init_custom()
-    {
-        Dims network_input_dims = m_cuda_engine->getBindingDimensions(m_cuda_engine->getBindingIndex(INPUT_BLOB_NAME));
-        m_net_in_w = network_input_dims.d[2];
-        m_net_in_h = network_input_dims.d[1];
-        m_net_in_c = network_input_dims.d[0];
-        m_in_row_step = m_net_in_w;
-        m_in_channel_step = m_net_in_w * m_net_in_h;
-        m_in_batch_step = m_net_in_w * m_net_in_h * m_net_in_c;
-        m_image_resized = cv::Mat(m_net_in_h, m_net_in_w, CV_8UC3);
-
-        Dims network_output_dims = m_cuda_engine->getBindingDimensions(m_cuda_engine->getBindingIndex(OUTPUT_BLOB_NAME));
-        m_net_out_w = network_output_dims.d[2];
-        m_net_out_h = network_output_dims.d[1];
-        m_out_row_step = m_net_out_w;
-        m_out_channel_step = m_net_out_w * m_net_out_h;
-        m_out_batch_step = m_net_out_w * m_net_out_h * network_output_dims.d[0];
-
-        ::plugin::RegionParameters params;
-        if (!m_yolov2_plugin_factory.get_region_params(0, params))
-            return false;
-
-        m_net_anchors = params.num;
-        m_net_coords = params.coords;
-        m_net_classes = params.classes;
-
-        // validate number of anchor priors
-        if (m_net_anchors * 2U != m_anchor_priors.size()) {
-            m_logger->log(ILogger::Severity::kERROR, "Network has " + std::to_string(m_net_anchors) + " anchors, expecting " +
-                          std::to_string(m_net_anchors * 2) + " anchor priors, but got " + std::to_string(m_anchor_priors.size()));
-            return false;
-        }
-
-        return true;
-    }
-
-    // called before every batch
-    virtual bool preprocess(const std::vector<cv::Mat>& images, std::map<int, std::vector<float>>& input_blobs)
-    {
-        if (images.size() > m_batch_size) {
-            m_logger->log(ILogger::Severity::kERROR, "Number images (" + std::to_string(images.size()) +
-                          ") must be smaller or equal to set batch size (" + std::to_string(m_batch_size) + ")");
-            return false;
-        }
-
-        int index = m_cuda_engine->getBindingIndex(INPUT_BLOB_NAME);
-        float* data = input_blobs[index].data();
-
-        for (size_t i=0; i<images.size(); i++) {
-            if (!bgr8_to_tensor_data(images[i], &data[i * m_in_batch_step]))
-                return false;
-        }
-
-        //save_tensor(data, input_blobs[index].size(), "input_tensor.txt");
-        return true;
-    }
-
-    void get_region_detections(const float* input, int image_w, int image_h, std::vector<Detection>& detections)
-    {
-        int x, y, anchor, cls;
-        int new_w=0;
-        int new_h=0;
-
-        // calculate image width/height that the image must have to fit the network while keeping the aspect ratio fixed
-        if ((m_net_in_w * image_h) < (m_net_in_h * image_w)) {
-            new_w = m_net_in_w;
-            new_h = (image_h * m_net_in_w)/image_w;
-        } else {
-            new_h = m_net_in_h;
-            new_w = (image_w * m_net_in_h)/image_h;
-        }
-
-        for (anchor=0; anchor<m_net_anchors; ++anchor) {
-            const int anchor_index = anchor * m_out_channel_step * (1 + m_net_coords + m_net_classes);
-            for (y=0; y<m_net_out_h; ++y) {
-                const int row_index = y * m_out_row_step + anchor_index;
-                for (x=0; x<m_net_out_w; ++x) {
-                    const int index = x + row_index;
-
-                    // extract objectness
-                    const float objectness = input[index + m_net_coords * m_out_channel_step];
-
-                    // extract class probs if objectness > threshold
-                    if (objectness > m_thresh) {
-                        Detection detection;
-
-                        // extract box
-                        detection.bbox.x = (x + input[index]) / m_net_out_w;
-                        detection.bbox.y = (y + input[index + m_out_channel_step]) / m_net_out_h;
-                        detection.bbox.width = exp(input[index + 2 * m_out_channel_step]) * m_anchor_priors[2 * anchor]   / m_net_out_w;
-                        detection.bbox.height = exp(input[index + 3 * m_out_channel_step]) * m_anchor_priors[2 * anchor + 1] / m_net_out_h;
-
-                        // transform bbox network coords to input image coordinates
-                        detection.bbox.x = (detection.bbox.x - (m_net_in_w - new_w)/2./m_net_in_w) / (new_w / static_cast<float>(m_net_in_w)) * image_w;
-                        detection.bbox.y = (detection.bbox.y - (m_net_in_h - new_h)/2./m_net_in_h) / (new_h / static_cast<float>(m_net_in_h)) * image_h;
-                        detection.bbox.width  *= m_net_in_w / static_cast<float>(new_w) * image_w;
-                        detection.bbox.height *= m_net_in_h / static_cast<float>(new_h) * image_h;
-
-                        // extract class label and prob of highest class prob
-                        detection.probability = 0;
-                        for (cls=0; cls < m_net_classes; ++cls) {
-                            float prob = objectness * input[index + (1 + m_net_coords + cls) * m_out_channel_step];
-                            if (prob > m_thresh && prob > detection.probability) {
-                                detection.class_label_index = cls;
-                                detection.probability = prob;
-                            }
-                        }
-                        detections.push_back(detection);
-                    }
-                }
-            }
-        }
-    }
-
-    float box_iou(cv::Rect2f a, cv::Rect2f b)
-    {
-        const cv::Rect2f intersection = a & b;
-        const float intersection_area = intersection.area();
-        const float union_area = a.area() + b.area() - intersection_area;
-
-        return intersection_area / union_area;
-    }
-
-    void do_nms(std::vector<Detection>& detections, float thresh)
-    {
-        size_t i, j;
-
-        // suppress by setting detection probability to zero
-        for (i = 0; i < detections.size(); ++i) {
-            for (j = i+1; j < detections.size(); ++j) {
-                if (box_iou(detections[i].bbox, detections[j].bbox) > thresh &&
-                    detections[i].class_label_index == detections[j].class_label_index) {
-                    if (detections[i].probability < detections[j].probability)
-                        detections[i].probability = 0;
-                    else
-                        detections[j].probability = 0;
-                }
-            }
-        }
-
-        // delete suppressed detections
-        for (i=detections.size()-1; i < detections.size(); --i) {
-            if (detections[i].probability == 0)
-                detections.erase(detections.begin() + i);
-        }
-    }
-
-    bool draw_detections(const std::vector<Detection> detections, cv::Mat& image)
-    {
-        const int font_face = cv::FONT_HERSHEY_SIMPLEX;
-        const double font_scale = 0.5;
-        const int box_thickness = 1;
-        const int text_thickness = 1;
-
-        const std::vector<cv::Scalar> colors(  {cv::Scalar(255, 255, 102),
-                                                cv::Scalar(102, 255, 224),
-                                                cv::Scalar(239, 102, 255),
-                                                cv::Scalar(102, 239, 255),
-                                                cv::Scalar(255, 102, 178),
-                                                cv::Scalar(193, 102, 255),
-                                                cv::Scalar(255, 102, 224),
-                                                cv::Scalar(102, 193, 255),
-                                                cv::Scalar(255, 102, 132),
-                                                cv::Scalar(117, 255, 102),
-                                                cv::Scalar(255, 163, 102),
-                                                cv::Scalar(102, 255, 178),
-                                                cv::Scalar(209, 255, 102),
-                                                cv::Scalar(163, 255, 102),
-                                                cv::Scalar(255, 209, 102),
-                                                cv::Scalar(102, 147, 255),
-                                                cv::Scalar(147, 102, 255),
-                                                cv::Scalar(102, 255, 132),
-                                                cv::Scalar(255, 117, 102),
-                                                cv::Scalar(102, 102, 255)} );
-        int number_of_colors = colors.size();
-
-        for (auto detection : detections) {
-            cv::Point left_top(     std::max(0, static_cast<int>(detection.bbox.x - (detection.bbox.width / 2))),
-                                    std::max(0, static_cast<int>(detection.bbox.y - (detection.bbox.height / 2))));
-            cv::Point right_bottom( std::min(static_cast<int>(detection.bbox.x + (detection.bbox.width / 2)), image.cols - 1),
-                                    std::min(static_cast<int>(detection.bbox.y + (detection.bbox.height / 2)), image.rows - 1));
-
-            const size_t class_index = detection.class_label_index;
-            if (class_index >= m_class_names.size()) {
-                m_logger->log(ILogger::Severity::kERROR, "Class index '" + std::to_string(class_index) + "' exceeds class names list"
-                                                         " (list size = " + std::to_string(m_class_names.size()));
-                return false;
-            }
-
-            cv::Scalar color(colors[class_index % number_of_colors]);
-            std::string text(std::to_string(static_cast<int>(detection.probability * 100)) + "% " + m_class_names[class_index]);
-
-            int baseline;
-            cv::Size text_size = cv::getTextSize(text, font_face, font_scale, text_thickness, &baseline);
-
-            /* left bottom origin */
-            cv::Point text_orig(    std::min(image.cols - text_size.width - 1, left_top.x),
-                                    std::max(text_size.height, left_top.y - baseline));
-
-
-            /* draw bounding box */
-            cv::rectangle(image, left_top, right_bottom, color, box_thickness);
-
-            /* draw text and text background */
-            cv::Rect background(text_orig.x, text_orig.y - text_size.height, text_size.width, text_size.height + baseline);
-            cv::rectangle(image, background, color, cv::FILLED);
-            cv::putText(image, text, text_orig, font_face, font_scale, cv::Scalar(0, 0, 0), text_thickness, cv::LINE_AA);
-        }
-
-        return true;
-    }
-
-    // called after every batch
-    virtual bool postprocess(const std::vector<cv::Mat>& images, const std::map<int, std::vector<float>>& output_blobs)
-    {
-        int index = m_cuda_engine->getBindingIndex(OUTPUT_BLOB_NAME);
-        const float* output = output_blobs.at(index).data();
-
-        //save_tensor(output, output_blobs.at(index).size(), "output_tensor.txt");
-
-        for (size_t i=0; i<images.size(); i++) {
-            std::vector<Detection> detections;
-
-            cv::Mat out_img = images[i].clone();
-            get_region_detections(&output[i * m_out_batch_step], out_img.cols, out_img.rows, detections);
-            do_nms(detections, m_nms_thresh);
-            if (!draw_detections(detections, out_img))
-                return false;
-
-            cv::imshow("out", out_img);
-        }
-
-        return true;
-    }
-
-private:
-    Yolov2PluginFactory m_yolov2_plugin_factory;
-    float m_thresh;
-    float m_nms_thresh;
-    std::vector<std::string> m_class_names;
-    std::vector<float> m_anchor_priors;
-
     int m_net_in_w;
     int m_net_in_h;
-    int m_net_in_c;
     int m_net_out_w;
     int m_net_out_h;
     int m_net_coords;
     int m_net_anchors;
     int m_net_classes;
 
-    int m_in_row_step;
-    int m_in_channel_step;
-    int m_in_batch_step;
     int m_out_row_step;
     int m_out_channel_step;
     int m_out_batch_step;
-
-    cv::Mat m_image_resized;
 };
+
+void draw_detections(const std::vector<Detection>& detections, cv::Mat& image)
+{
+    const int font_face = cv::FONT_HERSHEY_SIMPLEX;
+    const double font_scale = 0.5;
+    const int box_thickness = 1;
+    const int text_thickness = 1;
+
+    const std::vector<cv::Scalar> colors(  {cv::Scalar(255, 255, 102),
+                                            cv::Scalar(102, 255, 224),
+                                            cv::Scalar(239, 102, 255),
+                                            cv::Scalar(102, 239, 255),
+                                            cv::Scalar(255, 102, 178),
+                                            cv::Scalar(193, 102, 255),
+                                            cv::Scalar(255, 102, 224),
+                                            cv::Scalar(102, 193, 255),
+                                            cv::Scalar(255, 102, 132),
+                                            cv::Scalar(117, 255, 102),
+                                            cv::Scalar(255, 163, 102),
+                                            cv::Scalar(102, 255, 178),
+                                            cv::Scalar(209, 255, 102),
+                                            cv::Scalar(163, 255, 102),
+                                            cv::Scalar(255, 209, 102),
+                                            cv::Scalar(102, 147, 255),
+                                            cv::Scalar(147, 102, 255),
+                                            cv::Scalar(102, 255, 132),
+                                            cv::Scalar(255, 117, 102),
+                                            cv::Scalar(102, 102, 255)} );
+    int number_of_colors = colors.size();
+
+    for (auto detection : detections) {
+        cv::Point left_top(     std::max(0, static_cast<int>(detection.bbox.x - (detection.bbox.width / 2))),
+                                std::max(0, static_cast<int>(detection.bbox.y - (detection.bbox.height / 2))));
+        cv::Point right_bottom( std::min(static_cast<int>(detection.bbox.x + (detection.bbox.width / 2)), image.cols - 1),
+                                std::min(static_cast<int>(detection.bbox.y + (detection.bbox.height / 2)), image.rows - 1));
+
+        cv::Scalar color(colors[detection.class_label_index % number_of_colors]);
+        std::string text(std::to_string(static_cast<int>(detection.probability * 100)) + "% " + detection.class_label);
+
+        int baseline;
+        cv::Size text_size = cv::getTextSize(text, font_face, font_scale, text_thickness, &baseline);
+
+        /* left bottom origin */
+        cv::Point text_orig(    std::min(image.cols - text_size.width - 1, left_top.x),
+                                std::max(text_size.height, left_top.y - baseline));
+
+
+        /* draw bounding box */
+        cv::rectangle(image, left_top, right_bottom, color, box_thickness);
+
+        /* draw text and text background */
+        cv::Rect background(text_orig.x, text_orig.y - text_size.height, text_size.width, text_size.height + baseline);
+        cv::rectangle(image, background, color, cv::FILLED);
+        cv::putText(image, text, text_orig, font_face, font_scale, cv::Scalar(0, 0, 0), text_thickness, cv::LINE_AA);
+    }
+}
+
+bool show_result(const cv::Mat& image, const std::vector<Detection>& detections)
+{
+    cv::Mat out = image.clone();
+    draw_detections(detections, out);
+    cv::imshow("result", out);
+
+    return true;
+}
 
 int main(int argc, char** argv)
 {
@@ -1108,10 +853,26 @@ int main(int argc, char** argv)
     }
 
     //TODO: for now, anchor priors are defined here, should be defined in plan file
-    std::vector<float> anchor_priors{0.57273, 0.677385, 1.87446, 2.06253, 3.33843, 5.47434, 7.88282, 3.52778, 9.77052, 9.16828};
+    std::vector<float> anchor_priors{0.57273, 0.677385,
+                                     1.87446, 2.06253,
+                                     3.33843, 5.47434,
+                                     7.88282, 3.52778,
+                                     9.77052, 9.16828};
 
-    //TODO: add input/output blob names as constructor args
-    Yolov2InferModel runner(BATCH_SIZE, 0.24, 0.45, class_names, anchor_priors);
+    auto logger = std::make_shared<Logger>(ILogger::Severity::kINFO);
+    auto plugin_fact = std::make_shared<Yolov2PluginFactory>(logger);
+    auto pre = std::make_shared<Bgr8LetterBoxPreProcessor>(INPUT_BLOB_NAME, logger);
+    auto post = std::make_shared<Yolov2PostProcessor>(INPUT_BLOB_NAME,
+                    OUTPUT_BLOB_NAME,
+                    0.24,
+                    class_names,
+                    anchor_priors,
+                    plugin_fact,
+                    logger,
+                    show_result,
+                    [](std::vector<Detection>& detections) { nms(detections, 0.45); });
+
+    InferModel runner(plugin_fact, pre, post, logger, BATCH_SIZE);
     std::vector<cv::Mat> images;
 
     cv::Mat img = cv::imread(input_image_file);
@@ -1122,7 +883,7 @@ int main(int argc, char** argv)
 
     images.push_back(img);
 
-    if (!runner.init(&gLogger, input_model_file)) {
+    if (!runner.init(input_model_file)) {
         std::cerr << "Failed to init runner" << std::endl;
         return -1;
     }
