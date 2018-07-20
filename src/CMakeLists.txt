@@ -1,3 +1,9 @@
+set (HEADERS
+    utils/logger.h
+    utils/file_io.h
+    utils/fp16.h
+)
+
 set (SOURCES
     utils/logger.cpp
     utils/file_io.cpp
