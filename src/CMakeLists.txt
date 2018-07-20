@@ -54,22 +54,20 @@ set (jetnet_INCLUDES
 )
 
 set (jetnet_LIBS
-    -lm;
-    -lstdc++;
+    m;
+    nvinfer_plugin;
+    nvinfer;
+    ${CUDA_LIBRARIES};
+    ${CUDA_CUBLAS_LIBRARIES};
     ${OpenCV_LIBS};
-    -lnvinfer_plugin;
-    -lnvinfer;
-    -lcuda;
-    -lcublas;
-    -lcurand;
-    -lcudart;
     CACHE INTERNAL ""
 )
+
+include_directories (${jetnet_INCLUDES})
 
 add_library (jetnet_static STATIC ${SRC})
 add_library (jetnet SHARED ${SRC})
 
-include_directories (${jetnet_INCLUDES})
 target_link_libraries (jetnet ${jetnet_LIBS})
 
 # install library target and header files

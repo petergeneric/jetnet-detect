@@ -19,6 +19,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
 message (STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 
 find_package (OpenCV REQUIRED)
+find_package (CUDA REQUIRED)
 
 add_subdirectory (src)
 add_subdirectory (examples)
