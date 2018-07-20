@@ -62,7 +62,7 @@ private:
     /*
      *  layer states (weights, layers and plugins)
      */
-    DarknetWeightsLoader m_weights;
+    std::unique_ptr<DarknetWeightsLoader> m_weights;
     Conv2dBatchLeaky m_convs[22];
     const float m_scale_value_f = 1/255.0;
     const __half m_scale_value_h = __float2half(m_scale_value_f);

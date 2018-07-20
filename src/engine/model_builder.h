@@ -1,8 +1,10 @@
 #ifndef MODEL_BUILDER_H
 #define MODEL_BUILDER_H
 
+#include "logger.h"
 #include <NvInfer.h>
 #include <string>
+#include <memory>
 
 namespace jetnet
 {
@@ -15,7 +17,7 @@ public:
      *  logger: all internal errors and info messages are send to this logger
      *  Returns true on success, false on failure
      */
-    bool init(nvinfer1::Logger* logger);
+    bool init(std::shared_ptr<Logger> logger);
 
     /*
      *  Check if this platform supports mixed precision f16-bit float
@@ -60,10 +62,10 @@ public:
     nvinfer1::IHostMemory* serialize(std::string filename);
 
 protected:
-    NvInfer::Logger* m_logger = nullptr;
-    NvInfer::IBuilder* m_builder = nullptr;
-    NvInfer::ICudaEngine* m_cuda_engine = nullptr;
-    NvInfer::INetworkDefinition* m_network = nullptr;
+    std::shared_ptr<Logger> m_logger = nullptr;
+    nvinfer1::IBuilder* m_builder = nullptr;
+    nvinfer1::ICudaEngine* m_cuda_engine = nullptr;
+    nvinfer1::INetworkDefinition* m_network = nullptr;
 };
 
 }

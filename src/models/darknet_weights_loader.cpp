@@ -1,12 +1,13 @@
 #include "darknet_weights_loader.h"
 
 using namespace jetnet;
+using namespace nvinfer1;
 
 DarknetWeightsLoader::DarknetWeightsLoader() :
-    DarknetWeightsLoader(nvinfer1::DataType::kFLOAT)
+    datatype(DataType::kFLOAT)
 {
 }
-DarknetWeightsLoader::DarknetWeightsLoader(nvinfer1::DataType dt) :
+DarknetWeightsLoader::DarknetWeightsLoader(DataType dt) :
     datatype(dt)
 {
 }
@@ -68,14 +69,14 @@ std::vector<float> DarknetWeightsLoader::get_floats(size_t len)
     return weights;
 }
 
-nvinfer1::Weights DarknetWeightsLoader::get(std::vector<float> weights)
+Weights DarknetWeightsLoader::get(std::vector<float> weights)
 {
-    nvinfer1::Weights res{datatype, nullptr, 0};
+    Weights res{datatype, nullptr, 0};
 
     if (weights.empty())
         return res;
 
-    if (datatype == nvinfer1::DataType::kHALF) {
+    if (datatype == DataType::kHALF) {
         std::vector<__half> weights_half(weights.size());
 
         // convert weights to 16-bit float weights
@@ -95,7 +96,7 @@ nvinfer1::Weights DarknetWeightsLoader::get(std::vector<float> weights)
     return res;
 }
 
-nvinfer1::Weights DarknetWeightsLoader::get(size_t len)
+Weights DarknetWeightsLoader::get(size_t len)
 {
     std::vector<float> weights = get_floats(len);
     return get(weights);

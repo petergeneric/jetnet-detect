@@ -21,4 +21,4 @@ message (STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 find_package (OpenCV REQUIRED)
 
 add_subdirectory (src)
-#add_subdirectory (examples)
+add_subdirectory (examples)

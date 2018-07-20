@@ -1,8 +1,7 @@
 #include "fp16.h"
+#include <cstdint>
 
-using namespace jetnet;
-
-__half __float2half(float f)
+__half jetnet::__float2half(float f)
 {
     uint32_t x = bitwise_cast<uint32_t, float>(f);
     uint32_t u = (x & 0x7fffffff);
@@ -56,7 +55,7 @@ __half __float2half(float f)
     return bitwise_cast<__half, uint16_t>(sign | uint16_t(exponent<<10) | uint16_t(mantissa));
 }
 
-float __half2float(__half h)
+float jetnet::__half2float(__half h)
 {
     uint16_t x        = bitwise_cast<uint16_t,__half>(h);
     uint32_t sign     = ((x >> 15) & 1);

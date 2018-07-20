@@ -4,7 +4,7 @@
 using namespace jetnet;
 using namespace nvinfer1;
 
-bool ModelBuilder::init(Logger* logger)
+bool ModelBuilder::init(std::shared_ptr<Logger> logger)
 {
     m_logger = logger;
     m_builder = createInferBuilder(*m_logger);
