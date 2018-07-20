@@ -1,9 +1,18 @@
 #include "fp16.h"
 #include <cstdint>
 
+/* we use the union trick i.s.o. reinterpreting between float and uint32_t because it does
+ * not generate a strict-aliasing warning */
+union Convert
+{
+    float f;
+    uint32_t u;
+};
+
 __half jetnet::__float2half(float f)
 {
-    uint32_t x = bitwise_cast<uint32_t, float>(f);
+    Convert c = {f};
+    uint32_t x = c.u;
     uint32_t u = (x & 0x7fffffff);
 
     // Get rid of +NaN/-NaN case first.
@@ -90,5 +99,6 @@ float jetnet::__half2float(__half h)
     }
     else
         exponent += 0x70;
-    return bitwise_cast<float, uint32_t>( (sign<<31) | (exponent<<23) | mantissa );
+    Convert c{.u = (sign<<31) | (exponent<<23) | mantissa };
+    return c.f;
 }
