@@ -42,10 +42,7 @@ public:
         m_num_classes(num_classes),
         m_num_coords(num_coords) {}
 
-    /*
-     *  Called by the base class
-     */
-    virtual nvinfer1::INetworkDefinition* parse(nvinfer1::DataType dt);
+    nvinfer1::INetworkDefinition* parse(nvinfer1::DataType dt) override;
 
 private:
     /*

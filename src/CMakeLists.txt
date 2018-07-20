@@ -1,41 +1,57 @@
 set (HEADERS
     jetnet.h
+    data/bgr8_letterbox_pre_processor.h
+    data/detection.h
+    data/nms.h
+    data/post_processor.h
+    data/pre_processor.h
+    data/yolov2_post_processor.h
     engine/model_builder.h
+    engine/model_runner.h
     models/darknet_weights_loader.h
     models/yolov2_builder.h
     models/layers/leaky_relu_native.h
     models/layers/leaky_relu_plugin.h
     models/layers/conv2d_batch_leaky.h
-    utils/logger.h
+    models/plugins/yolov2_plugin_factory.h
     utils/file_io.h
     utils/fp16.h
+    utils/logger.h
+    utils/visual.h
 )
 
 set (SOURCES
+    data/bgr8_letterbox_pre_processor.cpp
+    data/nms.cpp
+    data/yolov2_post_processor.cpp
     engine/model_builder.cpp
+    engine/model_runner.cpp
     models/darknet_weights_loader.cpp
     models/yolov2_builder.cpp
     models/layers/leaky_relu_native.cpp
     models/layers/leaky_relu_plugin.cpp
     models/layers/conv2d_batch_leaky.cpp
-    utils/logger.cpp
+    models/plugins/yolov2_plugin_factory.cpp
     utils/file_io.cpp
     utils/fp16.cpp
+    utils/logger.cpp
+    utils/visual.cpp
 )
 
 set (SRC ${SOURCES} ${HEADERS})
 
-include_directories (
-    /usr/local/cuda/include
-    ${CMAKE_SOURCE_DIR}/src/engine
-    ${CMAKE_SOURCE_DIR}/src/models
-    ${CMAKE_SOURCE_DIR}/src/models/layers
-    ${CMAKE_SOURCE_DIR}/src/utils
-    ${OpenCV_INCLUDE_DIRS}
+set (jetnet_INCLUDES
+    /usr/local/cuda/include;
+    ${OpenCV_INCLUDE_DIRS};
+    ${CMAKE_SOURCE_DIR}/src;
+    ${CMAKE_SOURCE_DIR}/src/data;
+    ${CMAKE_SOURCE_DIR}/src/engine;
+    ${CMAKE_SOURCE_DIR}/src/models;
+    ${CMAKE_SOURCE_DIR}/src/models/layers;
+    ${CMAKE_SOURCE_DIR}/src/models/plugins;
+    ${CMAKE_SOURCE_DIR}/src/utils;
+    CACHE INTERNAL ""
 )
-
-add_library (jetnet_static STATIC ${SRC})
-add_library (jetnet SHARED ${SRC})
 
 set (jetnet_LIBS
     -lm;
@@ -50,6 +66,10 @@ set (jetnet_LIBS
     CACHE INTERNAL ""
 )
 
+add_library (jetnet_static STATIC ${SRC})
+add_library (jetnet SHARED ${SRC})
+
+include_directories (${jetnet_INCLUDES})
 target_link_libraries (jetnet ${jetnet_LIBS})
 
 # install library target and header files

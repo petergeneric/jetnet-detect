@@ -5,13 +5,13 @@
  *
  */
 #include "jetnet.h"
-#include <opencv2/opencv.hpp>
+#include <opencv2/opencv.hpp>   // for commandline parser
 
 #define INPUT_BLOB_NAME     "data"
 #define OUTPUT_BLOB_NAME    "probs"
 #define INPUT_H             416
 #define INPUT_W             416
-#define BATCH_SIZE          1
+#define MAX_BATCH_SIZE      1
 
 using namespace jetnet;
 
@@ -68,7 +68,7 @@ int main(int argc, char** argv)
     }
 
     std::cout << "Building the network..." << std::endl;
-    if (builder.build(BATCH_SIZE) == nullptr) {
+    if (builder.build(MAX_BATCH_SIZE) == nullptr) {
         std::cerr << "Failed to build network" << std::endl;
         return -1;
     }

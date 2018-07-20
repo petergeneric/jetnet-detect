@@ -1,12 +1,4 @@
-include_directories (
-    /usr/local/cuda/include
-    ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_SOURCE_DIR}/src/engine
-    ${CMAKE_SOURCE_DIR}/src/models
-    ${CMAKE_SOURCE_DIR}/src/models/layers
-    ${CMAKE_SOURCE_DIR}/src/utils
-    ${OpenCV_INCLUDE_DIRS}
-)
+include_directories (${jetnet_INCLUDES})
 
 link_libraries (
     jetnet_static
@@ -14,8 +6,10 @@ link_libraries (
 )
 
 add_executable (jetnet_build_yolov2 build_yolov2.cpp)
+add_executable (jetnet_run_yolov2 run_yolov2.cpp)
 
 install (TARGETS
     jetnet_build_yolov2
+    jetnet_run_yolov2
     DESTINATION "bin"
 )
