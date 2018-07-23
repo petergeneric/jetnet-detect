@@ -23,7 +23,7 @@ Building:
 ```
 mkdir build
 cd build
-cmake CMAKE_BUILD_TYPE=Release ..
+cmake ..
 make
 ```
 
