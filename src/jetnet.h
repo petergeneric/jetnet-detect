@@ -17,6 +17,7 @@
 #include "leaky_relu_plugin.h"
 #include "yolov2_plugin_factory.h"
 #include "yolov2_builder.h"
+#include "yolov3_builder.h"
 #include "file_io.h"
 #include "fp16.h"
 #include "custom_assert.h"

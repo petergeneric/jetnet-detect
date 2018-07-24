@@ -10,6 +10,7 @@ set (HEADERS
     engine/model_runner.h
     models/darknet_weights_loader.h
     models/yolov2_builder.h
+    models/yolov3_builder.h
     models/layers/leaky_relu_native.h
     models/layers/leaky_relu_plugin.h
     models/layers/conv2d_batch_leaky.h
@@ -30,6 +31,7 @@ set (SOURCES
     engine/model_runner.cpp
     models/darknet_weights_loader.cpp
     models/yolov2_builder.cpp
+    models/yolov3_builder.cpp
     models/layers/leaky_relu_native.cpp
     models/layers/leaky_relu_plugin.cpp
     models/layers/conv2d_batch_leaky.cpp
