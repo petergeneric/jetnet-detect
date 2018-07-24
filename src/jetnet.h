@@ -19,7 +19,7 @@
 #include "yolov2_builder.h"
 #include "file_io.h"
 #include "fp16.h"
-#include "gpu_assert.h"
+#include "custom_assert.h"
 #include "logger.h"
 #include "visual.h"
 

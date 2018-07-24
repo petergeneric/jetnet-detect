@@ -1,6 +1,6 @@
 #include "model_runner.h"
 #include "file_io.h"
-#include "gpu_assert.h"
+#include "custom_assert.h"
 #include <chrono>
 
 using namespace jetnet;

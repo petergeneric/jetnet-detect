@@ -13,6 +13,8 @@ set (HEADERS
     models/layers/leaky_relu_native.h
     models/layers/leaky_relu_plugin.h
     models/layers/conv2d_batch_leaky.h
+    models/plugins/blas_plugins.h
+    models/plugins/upsample_plugin.h
     models/plugins/yolov2_plugin_factory.h
     utils/file_io.h
     utils/fp16.h
@@ -31,6 +33,8 @@ set (SOURCES
     models/layers/leaky_relu_native.cpp
     models/layers/leaky_relu_plugin.cpp
     models/layers/conv2d_batch_leaky.cpp
+    models/plugins/upsample_plugin.cpp
+    models/plugins/blas_plugins.cu
     models/plugins/yolov2_plugin_factory.cpp
     utils/file_io.cpp
     utils/fp16.cpp
@@ -67,6 +71,9 @@ include_directories (${jetnet_INCLUDES})
 
 add_library (jetnet_static STATIC ${SRC})
 add_library (jetnet SHARED ${SRC})
+
+set_target_properties( jetnet_static PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+set_target_properties( jetnet PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 
 target_link_libraries (jetnet ${jetnet_LIBS})
 
