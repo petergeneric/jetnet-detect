@@ -63,7 +63,7 @@ private:
     nvinfer1::IRuntime* m_runtime = nullptr;
     nvinfer1::IExecutionContext* m_context = nullptr;
     std::vector<void*> m_cuda_buffers;
-    cudaStream_t m_cuda_stream;
+    cudaStream_t m_cuda_stream = nullptr;
 
     std::map<int, std::vector<float>> m_input_blobs;
     std::map<int, std::vector<float>> m_output_blobs;

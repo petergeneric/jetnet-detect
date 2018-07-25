@@ -177,7 +177,8 @@ void ModelRunner::create_cuda_stream()
 void ModelRunner::destroy_cuda_stream()
 {
     // release the stream and the buffers
-    CUDA_CHECK (cudaStreamDestroy(m_cuda_stream) );
+    if (m_cuda_stream)
+        CUDA_CHECK (cudaStreamDestroy(m_cuda_stream) );
 
     for (auto& buffer : m_cuda_buffers) {
         if (buffer != nullptr)
