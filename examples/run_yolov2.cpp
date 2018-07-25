@@ -61,7 +61,7 @@ int main(int argc, char** argv)
                                      9.77052, 9.16828};
 
     auto logger = std::make_shared<Logger>(nvinfer1::ILogger::Severity::kINFO);
-    auto plugin_fact = std::make_shared<Yolov2PluginFactory>(logger);
+    auto plugin_fact = std::make_shared<YoloPluginFactory>(logger);
     auto pre = std::make_shared<Bgr8LetterBoxPreProcessor>(INPUT_BLOB_NAME, logger);
     auto post = std::make_shared<Yolov2PostProcessor>(INPUT_BLOB_NAME,
                     OUTPUT_BLOB_NAME,

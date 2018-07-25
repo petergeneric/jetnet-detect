@@ -1,5 +1,5 @@
 #include "upsample_plugin.h"
-#include "blas_plugins.h"
+#include "blas_cuda.h"
 #include "custom_assert.h"
 
 using namespace jetnet;

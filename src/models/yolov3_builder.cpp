@@ -63,6 +63,7 @@ INetworkDefinition* Yolov3Builder::parse(DataType dt)
 
     ILayer* add0 = m_network->addElementWise(*conv3->getOutput(0), *conv1->getOutput(0), ElementWiseOperation::kSUM);
     ASSERT(add0);
+    add0->setName("add0");
 
     // Downsample
     ILayer* conv4 = m_convs[4]("conv4", m_network, *m_weights, *add0->getOutput(0), 128, DimsHW{3, 3}, DimsHW{1, 1}, DimsHW{2, 2});
@@ -76,6 +77,7 @@ INetworkDefinition* Yolov3Builder::parse(DataType dt)
 
     ILayer* add1 = m_network->addElementWise(*conv6->getOutput(0), *conv4->getOutput(0), ElementWiseOperation::kSUM);
     ASSERT(add1);
+    add1->setName("add1");
 
     ILayer* conv7 = m_convs[7]("conv7", m_network, *m_weights, *add1->getOutput(0), 64, DimsHW{1, 1}, DimsHW{0, 0});
     ASSERT(conv7);
@@ -85,6 +87,7 @@ INetworkDefinition* Yolov3Builder::parse(DataType dt)
 
     ILayer* add2 = m_network->addElementWise(*conv8->getOutput(0), *add1->getOutput(0), ElementWiseOperation::kSUM);
     ASSERT(add2);
+    add2->setName("add2");
 
     // Downsample
     ILayer* conv9 = m_convs[9]("conv9", m_network, *m_weights, *add2->getOutput(0), 256, DimsHW{3, 3}, DimsHW{1, 1}, DimsHW{2, 2});
@@ -98,6 +101,7 @@ INetworkDefinition* Yolov3Builder::parse(DataType dt)
 
     ILayer* add3 = m_network->addElementWise(*conv11->getOutput(0), *conv9->getOutput(0), ElementWiseOperation::kSUM);
     ASSERT(add3);
+    add3->setName("add3");
 
     ILayer* conv12 = m_convs[12]("conv12", m_network, *m_weights, *add3->getOutput(0), 128, DimsHW{1, 1}, DimsHW{0, 0});
     ASSERT(conv12);
@@ -107,6 +111,7 @@ INetworkDefinition* Yolov3Builder::parse(DataType dt)
 
     ILayer* add4 = m_network->addElementWise(*conv13->getOutput(0), *add3->getOutput(0), ElementWiseOperation::kSUM);
     ASSERT(add4);
+    add4->setName("add4");
 
     ILayer* conv14 = m_convs[14]("conv14", m_network, *m_weights, *add4->getOutput(0), 128, DimsHW{1, 1}, DimsHW{0, 0});
     ASSERT(conv14);
@@ -116,6 +121,7 @@ INetworkDefinition* Yolov3Builder::parse(DataType dt)
 
     ILayer* add5 = m_network->addElementWise(*conv15->getOutput(0), *add4->getOutput(0), ElementWiseOperation::kSUM);
     ASSERT(add5);
+    add5->setName("add5");
 
     ILayer* conv16 = m_convs[16]("conv16", m_network, *m_weights, *add5->getOutput(0), 128, DimsHW{1, 1}, DimsHW{0, 0});
     ASSERT(conv16);
@@ -125,6 +131,7 @@ INetworkDefinition* Yolov3Builder::parse(DataType dt)
 
     ILayer* add6 = m_network->addElementWise(*conv17->getOutput(0), *add5->getOutput(0), ElementWiseOperation::kSUM);
     ASSERT(add6);
+    add6->setName("add6");
 
     ILayer* conv18 = m_convs[18]("conv18", m_network, *m_weights, *add6->getOutput(0), 128, DimsHW{1, 1}, DimsHW{0, 0});
     ASSERT(conv18);
@@ -134,6 +141,7 @@ INetworkDefinition* Yolov3Builder::parse(DataType dt)
 
     ILayer* add7 = m_network->addElementWise(*conv19->getOutput(0), *add6->getOutput(0), ElementWiseOperation::kSUM);
     ASSERT(add7);
+    add7->setName("add7");
 
     ILayer* conv20 = m_convs[20]("conv20", m_network, *m_weights, *add7->getOutput(0), 128, DimsHW{1, 1}, DimsHW{0, 0});
     ASSERT(conv20);
@@ -143,6 +151,7 @@ INetworkDefinition* Yolov3Builder::parse(DataType dt)
 
     ILayer* add8 = m_network->addElementWise(*conv21->getOutput(0), *add7->getOutput(0), ElementWiseOperation::kSUM);
     ASSERT(add8);
+    add8->setName("add8");
 
     ILayer* conv22 = m_convs[22]("conv22", m_network, *m_weights, *add8->getOutput(0), 128, DimsHW{1, 1}, DimsHW{0, 0});
     ASSERT(conv22);
@@ -152,6 +161,7 @@ INetworkDefinition* Yolov3Builder::parse(DataType dt)
 
     ILayer* add9 = m_network->addElementWise(*conv23->getOutput(0), *add8->getOutput(0), ElementWiseOperation::kSUM);
     ASSERT(add9);
+    add9->setName("add9");
 
     ILayer* conv24 = m_convs[24]("conv24", m_network, *m_weights, *add9->getOutput(0), 128, DimsHW{1, 1}, DimsHW{0, 0});
     ASSERT(conv24);
@@ -161,6 +171,7 @@ INetworkDefinition* Yolov3Builder::parse(DataType dt)
 
     ILayer* add10 = m_network->addElementWise(*conv25->getOutput(0), *add9->getOutput(0), ElementWiseOperation::kSUM);
     ASSERT(add10);
+    add10->setName("add10");
 
     // feed forward to concat1 ***
     // Downsample
@@ -175,6 +186,7 @@ INetworkDefinition* Yolov3Builder::parse(DataType dt)
 
     ILayer* add11 = m_network->addElementWise(*conv28->getOutput(0), *conv26->getOutput(0), ElementWiseOperation::kSUM);
     ASSERT(add11);
+    add11->setName("add11");
 
     ILayer* conv29 = m_convs[29]("conv29", m_network, *m_weights, *add11->getOutput(0), 256, DimsHW{1, 1}, DimsHW{0, 0});
     ASSERT(conv29);
@@ -184,6 +196,7 @@ INetworkDefinition* Yolov3Builder::parse(DataType dt)
 
     ILayer* add12 = m_network->addElementWise(*conv30->getOutput(0), *add11->getOutput(0), ElementWiseOperation::kSUM);
     ASSERT(add12);
+    add12->setName("add12");
 
     ILayer* conv31 = m_convs[31]("conv31", m_network, *m_weights, *add12->getOutput(0), 256, DimsHW{1, 1}, DimsHW{0, 0});
     ASSERT(conv31);
@@ -193,6 +206,7 @@ INetworkDefinition* Yolov3Builder::parse(DataType dt)
 
     ILayer* add13 = m_network->addElementWise(*conv32->getOutput(0), *add12->getOutput(0), ElementWiseOperation::kSUM);
     ASSERT(add13);
+    add13->setName("add13");
 
     ILayer* conv33 = m_convs[33]("conv33", m_network, *m_weights, *add13->getOutput(0), 256, DimsHW{1, 1}, DimsHW{0, 0});
     ASSERT(conv33);
@@ -202,6 +216,7 @@ INetworkDefinition* Yolov3Builder::parse(DataType dt)
 
     ILayer* add14 = m_network->addElementWise(*conv34->getOutput(0), *add13->getOutput(0), ElementWiseOperation::kSUM);
     ASSERT(add14);
+    add14->setName("add14");
 
     ILayer* conv35 = m_convs[35]("conv35", m_network, *m_weights, *add14->getOutput(0), 256, DimsHW{1, 1}, DimsHW{0, 0});
     ASSERT(conv35);
@@ -211,6 +226,7 @@ INetworkDefinition* Yolov3Builder::parse(DataType dt)
 
     ILayer* add15 = m_network->addElementWise(*conv36->getOutput(0), *add14->getOutput(0), ElementWiseOperation::kSUM);
     ASSERT(add15);
+    add15->setName("add15");
 
     ILayer* conv37 = m_convs[37]("conv37", m_network, *m_weights, *add15->getOutput(0), 256, DimsHW{1, 1}, DimsHW{0, 0});
     ASSERT(conv37);
@@ -220,6 +236,7 @@ INetworkDefinition* Yolov3Builder::parse(DataType dt)
 
     ILayer* add16 = m_network->addElementWise(*conv38->getOutput(0), *add15->getOutput(0), ElementWiseOperation::kSUM);
     ASSERT(add16);
+    add16->setName("add16");
 
     ILayer* conv39 = m_convs[39]("conv39", m_network, *m_weights, *add16->getOutput(0), 256, DimsHW{1, 1}, DimsHW{0, 0});
     ASSERT(conv39);
@@ -229,6 +246,7 @@ INetworkDefinition* Yolov3Builder::parse(DataType dt)
 
     ILayer* add17 = m_network->addElementWise(*conv40->getOutput(0), *add16->getOutput(0), ElementWiseOperation::kSUM);
     ASSERT(add17);
+    add17->setName("add17");
 
     ILayer* conv41 = m_convs[41]("conv41", m_network, *m_weights, *add17->getOutput(0), 256, DimsHW{1, 1}, DimsHW{0, 0});
     ASSERT(conv41);
@@ -238,6 +256,7 @@ INetworkDefinition* Yolov3Builder::parse(DataType dt)
 
     ILayer* add18 = m_network->addElementWise(*conv42->getOutput(0), *add17->getOutput(0), ElementWiseOperation::kSUM);
     ASSERT(add18);
+    add18->setName("add18");
 
     // feed forward to concat0 ***
     // Downsample
@@ -252,6 +271,7 @@ INetworkDefinition* Yolov3Builder::parse(DataType dt)
 
     ILayer* add19 = m_network->addElementWise(*conv45->getOutput(0), *conv43->getOutput(0), ElementWiseOperation::kSUM);
     ASSERT(add19);
+    add19->setName("add19");
 
     ILayer* conv46 = m_convs[46]("conv46", m_network, *m_weights, *add19->getOutput(0), 512, DimsHW{1, 1}, DimsHW{0, 0});
     ASSERT(conv46);
@@ -261,6 +281,7 @@ INetworkDefinition* Yolov3Builder::parse(DataType dt)
 
     ILayer* add20 = m_network->addElementWise(*conv47->getOutput(0), *add19->getOutput(0), ElementWiseOperation::kSUM);
     ASSERT(add20);
+    add20->setName("add20");
 
     ILayer* conv48 = m_convs[48]("conv48", m_network, *m_weights, *add20->getOutput(0), 512, DimsHW{1, 1}, DimsHW{0, 0});
     ASSERT(conv48);
@@ -270,6 +291,7 @@ INetworkDefinition* Yolov3Builder::parse(DataType dt)
 
     ILayer* add21 = m_network->addElementWise(*conv49->getOutput(0), *add20->getOutput(0), ElementWiseOperation::kSUM);
     ASSERT(add21);
+    add21->setName("add21");
 
     ILayer* conv50 = m_convs[50]("conv50", m_network, *m_weights, *add21->getOutput(0), 512, DimsHW{1, 1}, DimsHW{0, 0});
     ASSERT(conv50);
@@ -279,6 +301,7 @@ INetworkDefinition* Yolov3Builder::parse(DataType dt)
 
     ILayer* add22 = m_network->addElementWise(*conv51->getOutput(0), *add21->getOutput(0), ElementWiseOperation::kSUM);
     ASSERT(add22);
+    add22->setName("add22");
 
 
     ILayer* conv52 = m_convs[52]("conv52", m_network, *m_weights, *add22->getOutput(0), 512, DimsHW{1, 1}, DimsHW{0, 0});
@@ -308,6 +331,7 @@ INetworkDefinition* Yolov3Builder::parse(DataType dt)
     ILayer* conv72 = m_network->addConvolution(*conv57->getOutput(0), conv72_num_filters, conv72_kernel_size, conv72_weights,
                                                conv72_biases);
     ASSERT(conv72);
+    conv72->setName("conv72");
 
     // we implement the 'yolo' layer as just a sigmoid activation layer since x,y objectness and class scores need sigmoid activation.
     // width/height are calculated using the exponent of the w/h feature maps (second and third channel of the output tensor) i.s.o.
@@ -317,6 +341,7 @@ INetworkDefinition* Yolov3Builder::parse(DataType dt)
     // in that way we can activate the whole output tensor which simplifies the implementation of the 'yolo' layer
     ILayer* yolo0 = m_network->addActivation(*conv72->getOutput(0), ActivationType::kSIGMOID);
     ASSERT(yolo0);
+    yolo0->setName("yolo0");
 
     // first endpoint for large objects
     yolo0->getOutput(0)->setName(m_output_large.blob_name.c_str());
@@ -331,11 +356,14 @@ INetworkDefinition* Yolov3Builder::parse(DataType dt)
 
     ITensor* conv58_tensor = conv58->getOutput(0);
     ILayer* upsample0 = m_network->addPlugin(&conv58_tensor, 1, *m_upsample_plugin0);
+    ASSERT(upsample0);
+    upsample0->setName("upsample0");
 
     // Feed forward from add18
     ITensor* concat_tensors0[] = {upsample0->getOutput(0), add18->getOutput(0)};
     ILayer* concat0 = m_network->addConcatenation(concat_tensors0, 2);
     ASSERT(concat0);
+    concat0->setName("concat0");
 
 
     ILayer* conv59 = m_convs[59]("conv59", m_network, *m_weights, *concat0->getOutput(0), 256, DimsHW{1, 1}, DimsHW{0, 0});
@@ -365,10 +393,12 @@ INetworkDefinition* Yolov3Builder::parse(DataType dt)
     ILayer* conv73 = m_network->addConvolution(*conv64->getOutput(0), conv73_num_filters, conv73_kernel_size, conv73_weights,
                                                conv73_biases);
     ASSERT(conv73);
+    conv73->setName("conv73");
 
     // second 'yolo' layer
     ILayer* yolo1 = m_network->addActivation(*conv73->getOutput(0), ActivationType::kSIGMOID);
     ASSERT(yolo1);
+    yolo1->setName("yolo1");
 
     // second endpoint for medium sized objects
     yolo1->getOutput(0)->setName(m_output_mid.blob_name.c_str());
@@ -383,11 +413,14 @@ INetworkDefinition* Yolov3Builder::parse(DataType dt)
 
     ITensor* conv65_tensor = conv65->getOutput(0);
     ILayer* upsample1 = m_network->addPlugin(&conv65_tensor, 1, *m_upsample_plugin1);
+    ASSERT(upsample1);
+    upsample1->setName("upsample1");
 
     // Feed forward from add10
     ITensor* concat_tensors1[] = {upsample1->getOutput(0), add10->getOutput(0)};
     ILayer* concat1 = m_network->addConcatenation(concat_tensors1, 2);
     ASSERT(concat1);
+    concat1->setName("concat1");
 
 
     ILayer* conv66 = m_convs[66]("conv66", m_network, *m_weights, *concat1->getOutput(0), 128, DimsHW{1, 1}, DimsHW{0, 0});
@@ -417,14 +450,16 @@ INetworkDefinition* Yolov3Builder::parse(DataType dt)
     ILayer* conv74 = m_network->addConvolution(*conv71->getOutput(0), conv74_num_filters, conv74_kernel_size, conv74_weights,
                                                conv74_biases);
     ASSERT(conv74);
+    conv74->setName("conv74");
 
     // third 'yolo' layer
     ILayer* yolo2 = m_network->addActivation(*conv74->getOutput(0), ActivationType::kSIGMOID);
     ASSERT(yolo2);
+    yolo2->setName("yolo2");
 
     // third endpoint for small sized objects
-    yolo1->getOutput(0)->setName(m_output_small.blob_name.c_str());
-    m_network->markOutput(*yolo1->getOutput(0));
+    yolo2->getOutput(0)->setName(m_output_small.blob_name.c_str());
+    m_network->markOutput(*yolo2->getOutput(0));
 
     return m_network;
 }

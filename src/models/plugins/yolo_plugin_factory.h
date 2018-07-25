@@ -1,7 +1,8 @@
-#ifndef YOLOV2_PLUGIN_FACTORY_H
-#define YOLOV2_PLUGIN_FACTORY_H
+#ifndef YOLO_PLUGIN_FACTORY_H
+#define YOLO_PLUGIN_FACTORY_H
 
 #include "logger.h"
+#include "upsample_plugin.h"
 #include <NvInfer.h>
 #include <NvInferPlugin.h>
 #include <memory>
@@ -10,11 +11,13 @@
 namespace jetnet
 {
 
-class Yolov2PluginFactory : public nvinfer1::IPluginFactory
+/*
+ *  Plugin factory class for all yolo models
+ */
+class YoloPluginFactory : public nvinfer1::IPluginFactory
 {
-
 public:
-    Yolov2PluginFactory(std::shared_ptr<Logger> logger);
+    YoloPluginFactory(std::shared_ptr<Logger> logger);
 
     /*
      *  (Re)create plugin based on layer name
@@ -43,8 +46,9 @@ private:
     std::vector<std::unique_ptr<nvinfer1::plugin::INvPlugin, decltype(nvPluginDeleter)>> m_reorg_plugins;
     std::vector<std::unique_ptr<nvinfer1::plugin::INvPlugin, decltype(nvPluginDeleter)>> m_region_plugins;
     std::vector<nvinfer1::plugin::RegionParameters> m_region_params;
+    std::vector<std::unique_ptr<UpsamplePlugin>> m_upsample_plugins;
 };
 
 }
 
-#endif /* YOLOV2_PLUGIN_FACTORY_H */
+#endif /* YOLO_PLUGIN_FACTORY_H */

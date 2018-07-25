@@ -1,4 +1,4 @@
-#include "blas_plugins.h"
+#include "blas_cuda.h"
 #include "custom_assert.h"
 #include <cuda_runtime.h>
 #include <cublas_v2.h>

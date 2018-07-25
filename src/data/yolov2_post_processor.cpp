@@ -8,7 +8,7 @@ Yolov2PostProcessor::Yolov2PostProcessor(std::string input_blob_name,
                     float thresh,
                     std::vector<std::string> class_names,
                     std::vector<float> anchor_priors,
-                    std::shared_ptr<Yolov2PluginFactory> yolov2_plugin_factory,
+                    std::shared_ptr<YoloPluginFactory> yolo_plugin_factory,
                     std::shared_ptr<Logger> logger,
                     CbFunction cb,
                     NmsFunction nms) :
@@ -17,7 +17,7 @@ Yolov2PostProcessor::Yolov2PostProcessor(std::string input_blob_name,
     m_thresh(thresh),
     m_class_names(class_names),
     m_anchor_priors(anchor_priors),
-    m_yolov2_plugin_factory(yolov2_plugin_factory),
+    m_yolo_plugin_factory(yolo_plugin_factory),
     m_logger(logger),
     m_cb(cb),
     m_nms(nms)
@@ -47,7 +47,7 @@ bool Yolov2PostProcessor::init(const ICudaEngine* engine)
     //TODO: lose dependency towards yolov2 plugin factory and get the params by
     //calling serialize(buffer) method on the last plugin to get the anchor, coords and class nums
     ::plugin::RegionParameters params;
-    if (!m_yolov2_plugin_factory->get_region_params(0, params))
+    if (!m_yolo_plugin_factory->get_region_params(0, params))
         return false;
 
     m_net_anchors = params.num;

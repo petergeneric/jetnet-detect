@@ -14,9 +14,9 @@ set (HEADERS
     models/layers/leaky_relu_native.h
     models/layers/leaky_relu_plugin.h
     models/layers/conv2d_batch_leaky.h
-    models/plugins/blas_plugins.h
+    models/plugins/blas_cuda.h
     models/plugins/upsample_plugin.h
-    models/plugins/yolov2_plugin_factory.h
+    models/plugins/yolo_plugin_factory.h
     utils/file_io.h
     utils/fp16.h
     utils/logger.h
@@ -36,8 +36,8 @@ set (SOURCES
     models/layers/leaky_relu_plugin.cpp
     models/layers/conv2d_batch_leaky.cpp
     models/plugins/upsample_plugin.cpp
-    models/plugins/blas_plugins.cu
-    models/plugins/yolov2_plugin_factory.cpp
+    models/plugins/blas_cuda.cu
+    models/plugins/yolo_plugin_factory.cpp
     utils/file_io.cpp
     utils/fp16.cpp
     utils/logger.cpp

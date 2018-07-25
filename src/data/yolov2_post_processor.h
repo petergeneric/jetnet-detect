@@ -3,7 +3,7 @@
 
 #include "post_processor.h"
 #include "nms.h"
-#include "yolov2_plugin_factory.h"
+#include "yolo_plugin_factory.h"
 #include <NvInfer.h>
 #include <functional>
 #include <memory>
@@ -35,7 +35,7 @@ public:
                         float thresh,
                         std::vector<std::string> class_names,
                         std::vector<float> anchor_priors,
-                        std::shared_ptr<Yolov2PluginFactory> yolov2_plugin_factory,
+                        std::shared_ptr<YoloPluginFactory> yolo_plugin_factory,
                         std::shared_ptr<Logger> logger,
                         CbFunction cb,
                         NmsFunction nms);
@@ -51,7 +51,7 @@ private:
     float m_thresh;
     std::vector<std::string> m_class_names;
     std::vector<float> m_anchor_priors;
-    std::shared_ptr<Yolov2PluginFactory> m_yolov2_plugin_factory;
+    std::shared_ptr<YoloPluginFactory> m_yolo_plugin_factory;
     std::shared_ptr<Logger> m_logger;
     CbFunction m_cb;
     NmsFunction m_nms;
