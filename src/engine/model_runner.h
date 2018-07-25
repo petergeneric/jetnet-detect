@@ -4,6 +4,7 @@
 #include "logger.h"
 #include "pre_processor.h"
 #include "post_processor.h"
+#include "profiler.h"
 #include <opencv2/opencv.hpp>
 #include <NvInfer.h>
 #include <cuda_runtime.h>
@@ -29,7 +30,7 @@ public:
                 std::shared_ptr<IPreProcessor> pre,
                 std::shared_ptr<IPostProcessor> post,
                 std::shared_ptr<Logger> logger,
-                size_t batch_size);
+                size_t batch_size, bool enable_profiling = false);
 
     ~ModelRunner();
 
@@ -43,6 +44,9 @@ public:
      *  Run a set of images through the network. The number of images must be <= max batch size
      */
     bool operator()(std::vector<cv::Mat> images);
+
+    //TODO: add more flexibility
+    void print_profiling();
 
 private:
     nvinfer1::ICudaEngine* deserialize(const void* data, size_t length);
@@ -58,7 +62,10 @@ private:
     std::shared_ptr<IPostProcessor> m_post;
     std::shared_ptr<Logger> m_logger;
     size_t m_batch_size;
+    bool m_enable_profiling;
 
+    SimpleProfiler m_model_profiler;
+    SimpleProfiler m_host_profiler;
     nvinfer1::ICudaEngine* m_cuda_engine = nullptr;
     nvinfer1::IRuntime* m_runtime = nullptr;
     nvinfer1::IExecutionContext* m_context = nullptr;

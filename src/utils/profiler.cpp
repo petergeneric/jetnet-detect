@@ -1,12 +1,14 @@
 #include "profiler.h"
+#include <iomanip>
 
-using namespace jetnet;
 using namespace nvinfer1;
 
-SimpleProfiler::SimpleProfiler(
-    std::string name,
-    const std::vector<SimpleProfiler>& src_profilers = std::vector<SimpleProfiler>())
-    : m_name(name)
+namespace jetnet
+{
+
+SimpleProfiler::SimpleProfiler(std::string name,
+                               const std::vector<SimpleProfiler>& src_profilers) :
+    m_name(name)
 {
     for (const auto& src_profiler : src_profilers) {
         for (const auto& rec : src_profiler.m_profile) {
@@ -22,18 +24,19 @@ SimpleProfiler::SimpleProfiler(
     }
 }
 
-void SimpleProfile::reportLayerTime(const char* layerName, float ms)
+void SimpleProfiler::reportLayerTime(const char* layerName, float ms)
 {
     m_profile[layerName].count++;
     m_profile[layerName].time += ms;
 }
 
-std::ostream& SimpleProfiler::operator<<(std::ostream& out, const SimpleProfiler& value)
+std::ostream& operator<<(std::ostream& out, const SimpleProfiler& value)
 {
     out << "========== " << value.m_name << " profile ==========" << std::endl;
     float totalTime = 0;
-    std::string layerNameStr = "TensorRT layer name";
-    int maxLayerNameLength = std::max(static_cast<int>(layerNameStr.size()), 70);
+    std::string layerNameStr = "Operation";
+
+    int maxLayerNameLength = static_cast<int>(layerNameStr.size());
     for (const auto& elem : value.m_profile)
     {
         totalTime += elem.second.time;
@@ -65,4 +68,6 @@ std::ostream& SimpleProfiler::operator<<(std::ostream& out, const SimpleProfiler
     out << "========== " << value.m_name << " total runtime = " << totalTime << " ms ==========" << std::endl;
 
     return out;
+}
+
 }

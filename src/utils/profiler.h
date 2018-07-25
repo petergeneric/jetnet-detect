@@ -5,12 +5,14 @@
 #include <vector>
 #include <string>
 #include <iostream>
+#include <map>
 
 namespace jetnet
 {
 
 class SimpleProfiler : public nvinfer1::IProfiler
 {
+public:
     struct Record
     {
         float time{0};
@@ -25,8 +27,7 @@ class SimpleProfiler : public nvinfer1::IProfiler
      *                  Aggregation will sum all runtime periods and all invokations for each reported
      *                  layer of all given profilers
      */
-    SimpleProfiler(
-        std::string name,
+    SimpleProfiler(std::string name,
         const std::vector<SimpleProfiler>& src_profilers = std::vector<SimpleProfiler>());
 
     void reportLayerTime(const char* layerName, float ms) override;

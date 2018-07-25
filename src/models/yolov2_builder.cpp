@@ -31,6 +31,7 @@ INetworkDefinition* Yolov2Builder::parse(DataType dt)
                                                     reinterpret_cast<const void*>(&m_scale_value_f), 1};
     ILayer* norm = m_network->addScale(*data, ScaleMode::kUNIFORM, shift, scale, power);
     ASSERT(norm);
+    norm->setName("normalise");
 
     // Start of the network
     ILayer* conv0 = m_convs[0]("conv0", m_network, *m_weights, *norm->getOutput(0), 32, DimsHW{3, 3});
@@ -135,6 +136,7 @@ INetworkDefinition* Yolov2Builder::parse(DataType dt)
     ITensor* concat_tensors[] = {reorg->getOutput(0), conv19->getOutput(0)};
     ILayer* concat = m_network->addConcatenation(concat_tensors, 2);
     ASSERT(concat);
+    concat->setName("concat");
 
     const int conv21_num_filters = 1024;
     ILayer* conv21 = m_convs[21]("conv21", m_network, *m_weights, *concat->getOutput(0), conv21_num_filters, DimsHW{3, 3});
@@ -148,6 +150,7 @@ INetworkDefinition* Yolov2Builder::parse(DataType dt)
     ILayer* conv22 = m_network->addConvolution(*conv21->getOutput(0), conv22_num_filters, conv22_kernel_size, conv22_weights,
                                                conv22_biases);
     ASSERT(conv22);
+    conv22->setName("conv22");
 
     // Region layer
     plugin::RegionParameters region_params;

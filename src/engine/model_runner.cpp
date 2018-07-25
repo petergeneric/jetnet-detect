@@ -5,32 +5,21 @@
 
 using namespace jetnet;
 using namespace nvinfer1;
-
-//TODO: fix decent profiling
-static std::chrono::time_point<std::chrono::system_clock> start_time;
-
-static void start()
-{
-    start_time = std::chrono::system_clock::now();
-}
-
-static void stop()
-{
-    auto now = std::chrono::system_clock::now();
-    std::chrono::duration<double> period = (now - start_time);
-    std::cout << "time elapsed = " << period.count() << std::endl;
-}
+using namespace std::chrono;
 
 ModelRunner::ModelRunner(std::shared_ptr<IPluginFactory> plugin_factory,
                          std::shared_ptr<IPreProcessor> pre,
                          std::shared_ptr<IPostProcessor> post,
                          std::shared_ptr<Logger> logger,
-                         size_t batch_size) :
+                         size_t batch_size, bool enable_profiling) :
     m_plugin_factory(plugin_factory),
     m_pre(pre),
     m_post(post),
     m_logger(logger),
-    m_batch_size(batch_size)
+    m_batch_size(batch_size),
+    m_enable_profiling(enable_profiling),
+    m_model_profiler("Model"),
+    m_host_profiler("Host")
 {
 }
 
@@ -83,6 +72,11 @@ bool ModelRunner::init(std::string model_file)
 
 bool ModelRunner::operator()(std::vector<cv::Mat> images)
 {
+    high_resolution_clock::time_point start;
+
+    if (m_enable_profiling)
+        start = high_resolution_clock::now();
+
     // sanity check on input
     if (images.size() > m_batch_size) {
         m_logger->log(ILogger::Severity::kERROR, "Number images (" + std::to_string(images.size()) +
@@ -90,29 +84,44 @@ bool ModelRunner::operator()(std::vector<cv::Mat> images)
         return false;
     }
 
-    start();
     if (!(*m_pre)(images, m_input_blobs)) {
         m_logger->log(ILogger::Severity::kERROR, "Preprocess failed");
         return false;
     }
-    stop();
 
-    start();
+    if (m_enable_profiling) {
+        m_host_profiler.reportLayerTime("pre-processing", duration<float, std::milli>(high_resolution_clock::now() - start).count());
+        start = std::chrono::high_resolution_clock::now();
+    }
+
     if (!infer()) {
         m_logger->log(ILogger::Severity::kERROR, "Infer failed");
         return false;
     }
-    stop();
 
-    start();
+    if (m_enable_profiling) {
+        m_host_profiler.reportLayerTime("inference", duration<float, std::milli>(high_resolution_clock::now() - start).count());
+        start = std::chrono::high_resolution_clock::now();
+    }
+
     if (!(*m_post)(images, m_output_blobs)) {
         m_logger->log(ILogger::Severity::kERROR, "Postprocess failed");
         return false;
     }
-    stop();
-    std::cout << "-------" << std::endl;
+
+    if (m_enable_profiling)
+        m_host_profiler.reportLayerTime("post-processing", duration<float, std::milli>(high_resolution_clock::now() - start).count());
 
     return true;
+}
+
+void ModelRunner::print_profiling()
+{
+    if (m_enable_profiling) {
+        std::cout << m_host_profiler;
+        std::cout << std::endl;
+        std::cout << m_model_profiler;
+    }
 }
 
 ICudaEngine* ModelRunner::deserialize(const void* data, size_t length)
@@ -136,6 +145,8 @@ ICudaEngine* ModelRunner::deserialize(std::string filename)
 IExecutionContext* ModelRunner::get_context()
 {
     m_context = m_cuda_engine->createExecutionContext();
+    if (m_enable_profiling)
+        m_context->setProfiler(&m_model_profiler);
     return m_context;
 }
 

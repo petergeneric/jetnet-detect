@@ -13,12 +13,16 @@
 
 using namespace jetnet;
 
-bool show_result(const cv::Mat& image, const std::vector<Detection>& detections)
+static bool g_enable_profiling;
+
+static bool show_result(const cv::Mat& image, const std::vector<Detection>& detections)
 {
     cv::Mat out = image.clone();
     draw_detections(detections, out);
-    cv::imshow("result", out);
-    cv::waitKey(0);
+    if (!g_enable_profiling) {
+        cv::imshow("result", out);
+        cv::waitKey(0);
+    }
 
     return true;
 }
@@ -29,7 +33,8 @@ int main(int argc, char** argv)
         "{help h usage ? |      | print this message }"
         "{@modelfile     |<none>| Built and serialized TensorRT model file }"
         "{@nameslist     |<none>| Class names list file }"
-        "{@inputimage    |<none>| Input RGB image }";
+        "{@inputimage    |<none>| Input RGB image }"
+        "{profile        |      | Enable profiling }";
 
     cv::CommandLineParser parser(argc, argv, keys);
     parser.about("Jetnet YOLOv2 runner");
@@ -42,6 +47,7 @@ int main(int argc, char** argv)
     auto input_model_file = parser.get<std::string>("@modelfile");
     auto input_names_file = parser.get<std::string>("@nameslist");
     auto input_image_file = parser.get<std::string>("@inputimage");
+    g_enable_profiling = parser.has("profile");
 
     if (!parser.check()) {
         parser.printErrors();
@@ -73,7 +79,7 @@ int main(int argc, char** argv)
                     show_result,
                     [](std::vector<Detection>& detections) { nms(detections, 0.45); });
 
-    ModelRunner runner(plugin_fact, pre, post, logger, BATCH_SIZE);
+    ModelRunner runner(plugin_fact, pre, post, logger, BATCH_SIZE, g_enable_profiling);
     std::vector<cv::Mat> images;
 
     cv::Mat img = cv::imread(input_image_file);
@@ -89,10 +95,17 @@ int main(int argc, char** argv)
         return -1;
     }
 
-    if (!runner(images)) {
-        std::cerr << "Failed to run network" << std::endl;
-        return -1;
+    size_t iterations = g_enable_profiling ? 10 : 1;
+
+    for (size_t i=0; i<iterations; ++i) {
+        if (!runner(images)) {
+            std::cerr << "Failed to run network" << std::endl;
+            return -1;
+        }
     }
+
+    // show profiling if enabled
+    runner.print_profiling();
 
     std::cout << "Success!" << std::endl;
     return 0;
