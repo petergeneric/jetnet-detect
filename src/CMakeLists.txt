@@ -20,6 +20,7 @@ set (HEADERS
     utils/file_io.h
     utils/fp16.h
     utils/logger.h
+    utils/profiler.h
     utils/visual.h
 )
 
@@ -41,6 +42,7 @@ set (SOURCES
     utils/file_io.cpp
     utils/fp16.cpp
     utils/logger.cpp
+    utils/profiler.cpp
     utils/visual.cpp
 )
 

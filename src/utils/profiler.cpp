@@ -3,28 +3,18 @@
 using namespace jetnet;
 using namespace nvinfer1;
 
-void SimpleProfile::reportLayerTime(const char* layerName, float ms)
-{
-    mProfile[layerName].count++;
-    mProfile[layerName].time += ms;
-}
-
 SimpleProfiler::SimpleProfiler(
-    const char* name,
-    const std::vector<SimpleProfiler>& srcProfilers = std::vector<SimpleProfiler>())
-    : mName(name)
+    std::string name,
+    const std::vector<SimpleProfiler>& src_profilers = std::vector<SimpleProfiler>())
+    : m_name(name)
 {
-    for (const auto& srcProfiler : srcProfilers)
-    {
-        for (const auto& rec : srcProfiler.mProfile)
-        {
-            auto it = mProfile.find(rec.first);
-            if (it == mProfile.end())
-            {
-                mProfile.insert(rec);
-            }
-            else
-            {
+    for (const auto& src_profiler : src_profilers) {
+        for (const auto& rec : src_profiler.m_profile) {
+            auto it = m_profile.find(rec.first);
+
+            if (it == m_profile.end()) {
+                m_profile.insert(rec);
+            } else {
                 it->second.time += rec.second.time;
                 it->second.count += rec.second.count;
             }
@@ -32,13 +22,19 @@ SimpleProfiler::SimpleProfiler(
     }
 }
 
+void SimpleProfile::reportLayerTime(const char* layerName, float ms)
+{
+    m_profile[layerName].count++;
+    m_profile[layerName].time += ms;
+}
+
 std::ostream& SimpleProfiler::operator<<(std::ostream& out, const SimpleProfiler& value)
 {
-    out << "========== " << value.mName << " profile ==========" << std::endl;
+    out << "========== " << value.m_name << " profile ==========" << std::endl;
     float totalTime = 0;
     std::string layerNameStr = "TensorRT layer name";
     int maxLayerNameLength = std::max(static_cast<int>(layerNameStr.size()), 70);
-    for (const auto& elem : value.mProfile)
+    for (const auto& elem : value.m_profile)
     {
         totalTime += elem.second.time;
         maxLayerNameLength = std::max(maxLayerNameLength, static_cast<int>(elem.first.size()));
@@ -56,7 +52,7 @@ std::ostream& SimpleProfiler::operator<<(std::ostream& out, const SimpleProfiler
             << " ";
         out << std::setw(12) << "Runtime, ms" << std::endl;
     }
-    for (const auto& elem : value.mProfile)
+    for (const auto& elem : value.m_profile)
     {
         out << std::setw(maxLayerNameLength) << elem.first << " ";
         out << std::setw(12) << std::fixed << std::setprecision(1) << (elem.second.time * 100.0F / totalTime) << "%"
@@ -66,7 +62,7 @@ std::ostream& SimpleProfiler::operator<<(std::ostream& out, const SimpleProfiler
     }
     out.flags(old_settings);
     out.precision(old_precision);
-    out << "========== " << value.mName << " total runtime = " << totalTime << " ms ==========" << std::endl;
+    out << "========== " << value.m_name << " total runtime = " << totalTime << " ms ==========" << std::endl;
 
     return out;
 }
