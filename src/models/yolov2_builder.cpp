@@ -34,7 +34,7 @@ INetworkDefinition* Yolov2Builder::parse(DataType dt)
     norm->setName("normalise");
 
     // Start of the network
-    ILayer* conv0 = m_convs[0]("conv0", m_network, *m_weights, *norm->getOutput(0), 32, DimsHW{3, 3});
+    ILayer* conv0 = m_convs[0]("conv0", m_network, *m_weights, *data, 32, DimsHW{3, 3});
     ASSERT(conv0);
 
     IPoolingLayer* pool0 = m_network->addPooling(*conv0->getOutput(0), PoolingType::kMAX, DimsHW{2, 2});

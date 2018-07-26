@@ -90,8 +90,9 @@ bool ModelRunner::operator()(std::vector<cv::Mat> images)
     }
 
     if (m_enable_profiling) {
-        m_host_profiler.reportLayerTime("pre-processing", duration<float, std::milli>(high_resolution_clock::now() - start).count());
-        start = std::chrono::high_resolution_clock::now();
+        auto now = high_resolution_clock::now();
+        m_host_profiler.reportLayerTime("pre-processing", duration<float, std::milli>(now - start).count());
+        start = now;
     }
 
     if (!infer()) {
@@ -100,8 +101,9 @@ bool ModelRunner::operator()(std::vector<cv::Mat> images)
     }
 
     if (m_enable_profiling) {
-        m_host_profiler.reportLayerTime("inference", duration<float, std::milli>(high_resolution_clock::now() - start).count());
-        start = std::chrono::high_resolution_clock::now();
+        auto now = high_resolution_clock::now();
+        m_host_profiler.reportLayerTime("inference", duration<float, std::milli>(now - start).count());
+        start = now;
     }
 
     if (!(*m_post)(images, m_output_blobs)) {
