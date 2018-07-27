@@ -24,15 +24,6 @@ INetworkDefinition* Yolov2Builder::parse(DataType dt)
     ITensor* data = m_network->addInput(m_input_blob_name.c_str(), DataType::kFLOAT, m_input_dimensions);
     ASSERT(data);
 
-    // input normalization from [0,255] to [0,1]
-    const Weights power{dt, nullptr, 0};
-    const Weights shift{dt, nullptr, 0};
-    const Weights scale{dt, dt == DataType::kHALF ? reinterpret_cast<const void*>(&m_scale_value_h) :
-                                                    reinterpret_cast<const void*>(&m_scale_value_f), 1};
-    ILayer* norm = m_network->addScale(*data, ScaleMode::kUNIFORM, shift, scale, power);
-    ASSERT(norm);
-    norm->setName("normalise");
-
     // Start of the network
     ILayer* conv0 = m_convs[0]("conv0", m_network, *m_weights, *data, 32, DimsHW{3, 3});
     ASSERT(conv0);

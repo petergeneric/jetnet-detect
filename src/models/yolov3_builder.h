@@ -61,8 +61,6 @@ private:
     std::unique_ptr<UpsamplePlugin> m_upsample_plugin0;
     std::unique_ptr<UpsamplePlugin> m_upsample_plugin1;
     Conv2dBatchLeaky m_convs[72];
-    const float m_scale_value_f = 1/255.0;
-    const __half m_scale_value_h = __float2half(m_scale_value_f);
 
 };
 

@@ -61,8 +61,6 @@ private:
      */
     std::unique_ptr<DarknetWeightsLoader> m_weights;
     Conv2dBatchLeaky m_convs[22];
-    const float m_scale_value_f = 1/255.0;
-    const __half m_scale_value_h = __float2half(m_scale_value_f);
 
     void (*nvPluginDeleter)(nvinfer1::plugin::INvPlugin*){[](nvinfer1::plugin::INvPlugin* ptr) { ptr->destroy(); }};
     std::unique_ptr<nvinfer1::plugin::INvPlugin, decltype(nvPluginDeleter)> m_reorg_plugin{nullptr, nvPluginDeleter};
