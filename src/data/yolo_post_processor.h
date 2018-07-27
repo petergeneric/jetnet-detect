@@ -1,6 +1,8 @@
 #ifndef YOLO_POST_PROCESSOR_H
 #define YOLO_POST_PROCESSOR_H
 
+#include "logger.h"
+#include "gpu_blob.h"
 #include "post_processor.h"
 #include "nms.h"
 #include <NvInfer.h>
@@ -41,19 +43,20 @@ public:
      */
     YoloPostProcessor(std::string input_blob_name,
                         Type network_type,
-                        std::vector<OutputSpec> output_spec,
+                        std::vector<OutputSpec> output_specs,
                         float thresh,
                         std::shared_ptr<Logger> logger,
                         CbFunction cb,
                         NmsFunction nms);
 
     bool init(const nvinfer1::ICudaEngine* engine) override;
-    bool operator()(const std::vector<cv::Mat>& images, const std::map<int, std::vector<float>>& output_blobs) override;
+    bool operator()(const std::vector<cv::Mat>& images, const std::map<int, GpuBlob>& output_blobs) override;
 
 private:
+    // internal output specifications structure
     struct OutputSpecInt
     {
-        bool init(const OutputSpec& in, std::vector<std::string> cls_names);
+        bool init(const OutputSpec& in, const nvinfer1::ICudaEngine* engine, YoloPostProcessor& parent);
 
         int w;                                  // network output width
         int h;                                  // network output height
@@ -66,11 +69,12 @@ private:
         std::vector<std::string> class_names;
     };
 
-    void get_region_detections(const float* input, int image_w, int image_h, std::vector<Detection>& detections);
+    void get_region_detections(const float* input, int image_w, int image_h, const OutputSpecInt& net_out,
+                                              std::vector<Detection>& detections);
 
     std::string m_input_blob_name;
     Type m_network_type;
-    std::vector<OutputSpec> m_output_spec;
+    std::vector<OutputSpec> m_output_specs;
     float m_thresh;
     std::shared_ptr<Logger> m_logger;
     CbFunction m_cb;
@@ -79,7 +83,10 @@ private:
     int m_net_in_w;
     int m_net_in_h;
     std::vector<OutputSpecInt> m_output_specs_int;
+    std::vector<float> m_cpu_blob;
+    std::function<float(float)> m_wh_activation;
 };
+
 }
 
 #endif /* YOLO_POST_PROCESSOR_H */

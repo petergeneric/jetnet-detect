@@ -3,10 +3,11 @@
 
 #include "bgr8_letterbox_pre_processor.h"
 #include "detection.h"
+#include "gpu_blob.h"
 #include "nms.h"
 #include "post_processor.h"
 #include "pre_processor.h"
-#include "yolov2_post_processor.h"
+#include "yolo_post_processor.h"
 #include "model_builder.h"
 #include "model_runner.h"
 #include "jetnet.h"
