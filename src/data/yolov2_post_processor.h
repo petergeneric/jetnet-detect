@@ -20,11 +20,11 @@ public:
 
     /*
      *  input_blob_name:        name of the input tensor. Needed to know the input dimensions of the network
-     *  output_blob_name:       name of the output tensor. Needed to knwo the output dimensions of the network
+     *  output_blob_name:       name of the output tensor. Needed to know the output dimensions of the network
      *  thresh:                 detection threshold
      *  class_names:            list of class names. Must have the same length as the number of classes the network supports
      *  anchor_priors:          anchor prior pairs
-     *  yolov2_plugin_factory:  Needed to get number of classes, number of anchors and number of coords since this info is not
+     *  yolo_plugin_factory:    Needed to get number of classes, number of anchors and number of coords since this info is not
      *                          available in the deserialized network
      *  logger:                 logger object
      *  cb:                     optional callback to retrieve the detection results
