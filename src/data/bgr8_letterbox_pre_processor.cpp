@@ -12,13 +12,6 @@ Bgr8LetterBoxPreProcessor::Bgr8LetterBoxPreProcessor(std::string input_blob_name
 {
 }
 
-Bgr8LetterBoxPreProcessor::~Bgr8LetterBoxPreProcessor()
-{
-    if (m_buffer) {
-        CUDA_CHECK( cudaFree(m_buffer) );
-    }
-}
-
 bool Bgr8LetterBoxPreProcessor::init(const ICudaEngine* engine)
 {
     Dims network_input_dims;
@@ -32,20 +25,18 @@ bool Bgr8LetterBoxPreProcessor::init(const ICudaEngine* engine)
     m_in_row_step = m_net_in_w;
     m_in_channel_step = m_net_in_w * m_net_in_h;
     m_in_batch_step = m_net_in_w * m_net_in_h * m_net_in_c;
+
     m_image_resized = cv::cuda::GpuMat(m_net_in_h, m_net_in_w, CV_8UC3);
     m_image_resized_float = cv::cuda::GpuMat(m_net_in_h, m_net_in_w, CV_32FC3);
-
-
-    CUDA_CHECK( cudaMalloc(&m_buffer, m_in_batch_step * sizeof(float)) );
-    m_image_resized_float_rgb = cv::cuda::GpuMat(m_net_in_c * m_net_in_h, m_net_in_w, CV_32FC1, m_buffer);
 
     return true;
 }
 
-bool Bgr8LetterBoxPreProcessor::operator()(const std::vector<cv::Mat>& images, std::map<int, std::vector<float>>& input_blobs)
+bool Bgr8LetterBoxPreProcessor::operator()(const std::vector<cv::Mat>& images, std::map<int, GpuBlob>& input_blobs)
 {
+    float* data = reinterpret_cast<float*>(input_blobs.at(m_input_blob_index).get());
+
     // fill all batches of the input blob
-    float* data = input_blobs[m_input_blob_index].data();
     for (size_t i=0; i<images.size(); i++) {
         if (!bgr8_to_tensor_data(images[i], &data[i * m_in_batch_step]))
             return false;
@@ -61,7 +52,7 @@ bool Bgr8LetterBoxPreProcessor::bgr8_to_tensor_data(const cv::Mat& input, float*
     const cv::Scalar border_color = cv::Scalar(0.5, 0.5, 0.5);
     cv::Rect rect_image, rect_greyborder1, rect_greyborder2;
     cv::cuda::GpuMat input_gpu, roi_image, roi_image_float, roi_greyborder1, roi_greyborder2;
-    std::vector<cv::cuda::GpuMat> floatMatChannels(3);
+    std::vector<cv::cuda::GpuMat> float_mat_channels(3);
 
     if (input.channels() != m_net_in_c) {
         m_logger->log(ILogger::Severity::kERROR, "Number of image channels (" + std::to_string(input.channels()) +
@@ -113,17 +104,16 @@ bool Bgr8LetterBoxPreProcessor::bgr8_to_tensor_data(const cv::Mat& input, float*
         input_gpu = roi_image;
     }
 
+    // uint8 BGR to float BGR and normalise (between 0 and 1)
     roi_image.convertTo(roi_image_float, CV_32FC3, 1/255.0);
 
-    floatMatChannels[2] = cv::cuda::GpuMat(m_net_in_h, m_net_in_w, CV_32FC1, &m_image_resized_float_rgb.data[0]);
-    floatMatChannels[1] = cv::cuda::GpuMat(m_net_in_h, m_net_in_w, CV_32FC1, &m_image_resized_float_rgb.data[sizeof(float) * m_in_channel_step]);
-    floatMatChannels[0] = cv::cuda::GpuMat(m_net_in_h, m_net_in_w, CV_32FC1, &m_image_resized_float_rgb.data[sizeof(float) * 2 * m_in_channel_step]);
+    // Note: output is a pointer to a GPU buffer
+    // BGRBGRBGR...BGR -> RRR...RRRGGG...GGGBBB...BBB
+    float_mat_channels[2] = cv::cuda::GpuMat(m_net_in_h, m_net_in_w, CV_32FC1, &output[0]);
+    float_mat_channels[1] = cv::cuda::GpuMat(m_net_in_h, m_net_in_w, CV_32FC1, &output[m_in_channel_step]);
+    float_mat_channels[0] = cv::cuda::GpuMat(m_net_in_h, m_net_in_w, CV_32FC1, &output[2 * m_in_channel_step]);
 
-    cv::cuda::split(m_image_resized_float, floatMatChannels);
-
-    // download preprocessed image
-    cv::Mat out(m_net_in_c * m_net_in_h, m_net_in_w, CV_32FC1, output);
-    m_image_resized_float_rgb.download(out);
+    cv::cuda::split(m_image_resized_float, float_mat_channels);
 
     return true;
 }

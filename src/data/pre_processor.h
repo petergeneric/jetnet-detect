@@ -1,6 +1,7 @@
 #ifndef PRE_PROCESSOR_H
 #define PRE_PROCESSOR_H
 
+#include "gpu_blob.h"
 #include <opencv2/opencv.hpp>
 #include <NvInfer.h>
 #include <vector>
@@ -25,7 +26,7 @@ public:
      *  input_blobs:    preprocessed image data that will be send to the network
      *  returns true on success, false on failure
      */
-    virtual bool operator()(const std::vector<cv::Mat>& images, std::map<int, std::vector<float>>& input_blobs) = 0;
+    virtual bool operator()(const std::vector<cv::Mat>& images, std::map<int, GpuBlob>& input_blobs) = 0;
 };
 
 }

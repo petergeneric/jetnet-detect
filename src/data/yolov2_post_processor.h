@@ -41,7 +41,7 @@ public:
                         NmsFunction nms);
 
     bool init(const nvinfer1::ICudaEngine* engine) override;
-    bool operator()(const std::vector<cv::Mat>& images, const std::map<int, std::vector<float>>& output_blobs) override;
+    bool operator()(const std::vector<cv::Mat>& images, const std::map<int, GpuBlob>& output_blobs) override;
 
 private:
     void get_region_detections(const float* input, int image_w, int image_h, std::vector<Detection>& detections);
@@ -68,7 +68,9 @@ private:
     int m_out_row_step;
     int m_out_channel_step;
     int m_out_batch_step;
+    std::vector<float> m_cpu_blob;
 };
+
 }
 
 #endif /* YOLOV2_POST_PROCESSOR_H */

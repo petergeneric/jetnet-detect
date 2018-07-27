@@ -25,7 +25,8 @@ ModelRunner::ModelRunner(std::shared_ptr<IPluginFactory> plugin_factory,
 
 ModelRunner::~ModelRunner()
 {
-    destroy_cuda_stream();
+    if (m_cuda_stream)
+        CUDA_CHECK (cudaStreamDestroy(m_cuda_stream) );
     //TODO: validate that everything is cleaned with asan
 }
 
@@ -65,7 +66,9 @@ bool ModelRunner::init(std::string model_file)
     }
 
     create_io_blobs();
-    create_cuda_stream();
+
+    // create CUDA stream
+    CUDA_CHECK( cudaStreamCreate(&m_cuda_stream) );
 
     return true;
 }
@@ -164,56 +167,23 @@ void ModelRunner::create_io_blobs()
             size *= dim.d[j];
 
         size *= m_batch_size;
-        std::vector<float> blob(size, 0.0);
-        if (m_cuda_engine->bindingIsInput(i))
-            m_input_blobs[i] = blob;
-        else
-            m_output_blobs[i] = blob;
-    }
-}
+        GpuBlob gpu_blob(size);
+        // get binding index sorted buffer pointer for infer() call
+        m_cuda_buffers.push_back(gpu_blob.get());
 
-void ModelRunner::create_cuda_stream()
-{
-    m_cuda_buffers.resize(m_cuda_engine->getNbBindings());
-
-    // create GPU buffers
-    for (auto& blob : m_input_blobs)
-        CUDA_CHECK( cudaMalloc(&m_cuda_buffers[blob.first], blob.second.size() * sizeof(float)) );
-
-    for (auto& blob : m_output_blobs)
-        CUDA_CHECK( cudaMalloc(&m_cuda_buffers[blob.first], blob.second.size() * sizeof(float)) );
-
-    // create CUDA stream
-    CUDA_CHECK( cudaStreamCreate(&m_cuda_stream) );
-}
-
-void ModelRunner::destroy_cuda_stream()
-{
-    // release the stream and the buffers
-    if (m_cuda_stream)
-        CUDA_CHECK (cudaStreamDestroy(m_cuda_stream) );
-
-    for (auto& buffer : m_cuda_buffers) {
-        if (buffer != nullptr)
-            CUDA_CHECK( cudaFree(buffer) );
+        if (m_cuda_engine->bindingIsInput(i)) {
+            m_input_blobs.insert(std::pair<int, GpuBlob>(i, std::move(gpu_blob)));
+        } else {
+            m_output_blobs.insert(std::pair<int, GpuBlob>(i, std::move(gpu_blob)));
+        }
     }
 }
 
 bool ModelRunner::infer()
 {
-    // DMA the input to the GPU
-    for (auto& blob : m_input_blobs)
-        CUDA_CHECK( cudaMemcpyAsync(m_cuda_buffers[blob.first], blob.second.data(), blob.second.size() * sizeof(float),
-                            cudaMemcpyHostToDevice, m_cuda_stream) );
-
     // Start execution
     if (!m_context->enqueue(m_batch_size, m_cuda_buffers.data(), m_cuda_stream, nullptr))
         return false;
-
-    // DMA the output back when finished
-    for (auto& blob : m_output_blobs)
-        CUDA_CHECK( cudaMemcpyAsync(blob.second.data(), m_cuda_buffers[blob.first], blob.second.size() * sizeof(float),
-                            cudaMemcpyDeviceToHost, m_cuda_stream) );
 
     // Wait for execution to finish
     CUDA_CHECK( cudaStreamSynchronize(m_cuda_stream) );

@@ -21,10 +21,8 @@ public:
     Bgr8LetterBoxPreProcessor(std::string input_blob_name,
                               std::shared_ptr<Logger> logger);
 
-    ~Bgr8LetterBoxPreProcessor();
-
     bool init(const nvinfer1::ICudaEngine* engine) override;
-    bool operator()(const std::vector<cv::Mat>& images, std::map<int, std::vector<float>>& input_blobs) override;
+    bool operator()(const std::vector<cv::Mat>& images, std::map<int, GpuBlob>& input_blobs) override;
 
 private:
     bool bgr8_to_tensor_data(const cv::Mat& input, float* output);
@@ -43,8 +41,6 @@ private:
 
     cv::cuda::GpuMat m_image_resized;
     cv::cuda::GpuMat m_image_resized_float;
-    cv::cuda::GpuMat m_image_resized_float_rgb;
-    void* m_buffer = nullptr;
 };
 
 }
