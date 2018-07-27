@@ -8,6 +8,7 @@ set (HEADERS
     data/yolov2_post_processor.h
     engine/model_builder.h
     engine/model_runner.h
+    engine/gpu_blob.h
     models/darknet_weights_loader.h
     models/yolov2_builder.h
     models/yolov3_builder.h
@@ -30,6 +31,7 @@ set (SOURCES
     data/yolov2_post_processor.cpp
     engine/model_builder.cpp
     engine/model_runner.cpp
+    engine/gpu_blob.cpp
     models/darknet_weights_loader.cpp
     models/yolov2_builder.cpp
     models/yolov3_builder.cpp

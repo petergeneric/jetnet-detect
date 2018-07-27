@@ -1,6 +1,7 @@
 #ifndef POST_PROCESSOR_H
 #define POST_PROCESSOR_H
 
+#include "gpu_blob.h"
 #include <opencv2/opencv.hpp>
 #include <NvInfer.h>
 #include <vector>
@@ -25,7 +26,7 @@ public:
      *  output_blobs:   output data from the network that needs post-processing
      *  returns true on success, false on failure
      */
-    virtual bool operator()(const std::vector<cv::Mat>& images, const std::map<int, std::vector<float>>& output_blobs) = 0;
+    virtual bool operator()(const std::vector<cv::Mat>& images, const std::map<int, GpuBlob>& output_blobs) = 0;
 };
 
 }

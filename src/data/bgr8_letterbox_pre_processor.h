@@ -22,7 +22,7 @@ public:
                               std::shared_ptr<Logger> logger);
 
     bool init(const nvinfer1::ICudaEngine* engine) override;
-    bool operator()(const std::vector<cv::Mat>& images, std::map<int, std::vector<float>>& input_blobs) override;
+    bool operator()(const std::vector<cv::Mat>& images, std::map<int, GpuBlob>& input_blobs) override;
 
 private:
     bool bgr8_to_tensor_data(const cv::Mat& input, float* output);
@@ -39,7 +39,8 @@ private:
     int m_in_channel_step;
     int m_in_batch_step;
 
-    cv::Mat m_image_resized;
+    cv::cuda::GpuMat m_image_resized;
+    cv::cuda::GpuMat m_image_resized_float;
 };
 
 }

@@ -72,9 +72,10 @@ bool Yolov2PostProcessor::init(const ICudaEngine* engine)
     return true;
 }
 
-bool Yolov2PostProcessor::operator()(const std::vector<cv::Mat>& images, const std::map<int, std::vector<float>>& output_blobs)
+bool Yolov2PostProcessor::operator()(const std::vector<cv::Mat>& images, const std::map<int, GpuBlob>& output_blobs)
 {
-    const float* output = output_blobs.at(m_output_blob_index).data();
+    output_blobs.at(m_output_blob_index).download(m_cpu_blob);
+    const float* output = m_cpu_blob.data();
 
     for (size_t i=0; i<images.size(); i++) {
         std::vector<Detection> detections;
