@@ -11,7 +11,6 @@
 #define OUTPUT_BLOB1_NAME   "probs1"
 #define OUTPUT_BLOB2_NAME   "probs2"
 #define OUTPUT_BLOB3_NAME   "probs3"
-#define BATCH_SIZE          1
 
 using namespace jetnet;
 
@@ -36,7 +35,10 @@ int main(int argc, char** argv)
         "{@modelfile     |<none>| Built and serialized TensorRT model file }"
         "{@nameslist     |<none>| Class names list file }"
         "{@inputimage    |<none>| Input RGB image }"
-        "{profile        |      | Enable profiling }";
+        "{profile        |      | Enable profiling }"
+        "{t thresh       | 0.5  | Detection threshold }"
+        "{nt nmsthresh   | 0.45 | Non-maxima suppression threshold }"
+        "{batch          | 1    | Batch size }";
 
     cv::CommandLineParser parser(argc, argv, keys);
     parser.about("Jetnet YOLOv3 runner");
@@ -50,6 +52,9 @@ int main(int argc, char** argv)
     auto input_names_file = parser.get<std::string>("@nameslist");
     auto input_image_file = parser.get<std::string>("@inputimage");
     g_enable_profiling = parser.has("profile");
+    auto threshold = parser.get<float>("thresh");
+    auto nms_threshold = parser.get<float>("nmsthresh");
+    auto batch_size = parser.get<int>("batch");
 
     if (!parser.check()) {
         parser.printErrors();
@@ -79,12 +84,12 @@ int main(int argc, char** argv)
     auto post = std::make_shared<YoloPostProcessor>(INPUT_BLOB_NAME,
                     YoloPostProcessor::Type::Yolov3,
                     output_specs,
-                    0.5,
+                    threshold,
                     logger,
                     show_result,
-                    [](std::vector<Detection>& detections) { nms(detections, 0.45); });
+                    [=](std::vector<Detection>& detections) { nms(detections, nms_threshold); });
 
-    ModelRunner runner(plugin_fact, pre, post, logger, BATCH_SIZE, g_enable_profiling);
+    ModelRunner runner(plugin_fact, pre, post, logger, batch_size, g_enable_profiling);
     std::vector<cv::Mat> images;
 
     cv::Mat img = cv::imread(input_image_file);
@@ -93,7 +98,10 @@ int main(int argc, char** argv)
         return -1;
     }
 
-    images.push_back(img);
+    // process the same image multiple times if batch size > 1
+    for (int i=0; i<batch_size; ++i) {
+        images.push_back(img);
+    }
 
     if (!runner.init(input_model_file)) {
         std::cerr << "Failed to init runner" << std::endl;
