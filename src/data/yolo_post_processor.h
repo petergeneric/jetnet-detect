@@ -84,7 +84,7 @@ private:
     int m_net_in_h;
     std::vector<OutputSpecInt> m_output_specs_int;
     std::vector<float> m_cpu_blob;
-    std::function<float(float)> m_wh_activation;
+    std::function<float(float, float, float, float)> m_calc_box_size;
 };
 
 }

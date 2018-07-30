@@ -59,7 +59,11 @@ bool YoloPostProcessor::init(const ICudaEngine* engine)
 
     switch(m_network_type) {
         case Type::Yolov2:
-            m_wh_activation = [](float x) { return exp(x); };
+            m_calc_box_size = [](float x, float prior, float in_size, float out_size)
+                                {
+                                    (void)in_size;
+                                    return (exp(x) * prior) / out_size;
+                                };
 
             if (m_output_specs.size() != 1) {
                 m_logger->log(ILogger::Severity::kERROR, "Running YOLOv2, expecting only one output spec, got " +
@@ -72,7 +76,11 @@ bool YoloPostProcessor::init(const ICudaEngine* engine)
             // for yolov3, also the width/height output maps are sigmoid applied. To get the final
             // width/height values we need exp(x) where x is the output of the last conv layer (without sigmoid)
             // we can prove that exp(x) = s(x) / (1 - s(x)) where s is the sigmoid operator
-            m_wh_activation = [](float x) { return x / (1.0 - x); };
+            m_calc_box_size = [](float x, float prior, float in_size, float out_size)
+                                {
+                                    (void)out_size;
+                                    return (prior * x) / ((1.0 - x) * in_size);
+                                };
 
             if (m_output_specs.size() != 3) {
                 m_logger->log(ILogger::Severity::kERROR, "Running YOLOv3, expecting three output specs, got " +
@@ -108,7 +116,7 @@ bool YoloPostProcessor::operator()(const std::vector<cv::Mat>& images, const std
             const int out_batch_step = output_spec_int.w * output_spec_int.h * output_spec_int.c;
             output_blobs.at(output_spec_int.blob_index).download(m_cpu_blob);
 
-            get_region_detections(&m_cpu_blob.data()[i * out_batch_step], images[i].cols, images[i].rows, 
+            get_region_detections(&m_cpu_blob.data()[i * out_batch_step], images[i].cols, images[i].rows,
                                   output_spec_int, detections);
         }
 
@@ -161,17 +169,18 @@ void YoloPostProcessor::get_region_detections(const float* input, int image_w, i
                 // extract box
                 detection.bbox.x = (x + input[index]) / net_out.w;
                 detection.bbox.y = (y + input[index + out_channel_step]) / net_out.h;
-                const float w = m_wh_activation(input[index + 2 * out_channel_step]);
-                const float h = m_wh_activation(input[index + 3 * out_channel_step]);
-                detection.bbox.width =  w * net_out.anchor_priors[2 * anchor] / net_out.w;
-                detection.bbox.height = h * net_out.anchor_priors[2 * anchor + 1] / net_out.h;
+                detection.bbox.width = m_calc_box_size(input[index + 2 * out_channel_step],
+                                                       net_out.anchor_priors[2 * anchor],
+                                                       m_net_in_w, net_out.w);
+                detection.bbox.height = m_calc_box_size(input[index + 3 * out_channel_step],
+                                                       net_out.anchor_priors[2 * anchor + 1],
+                                                       m_net_in_h, net_out.h);
 
                 // transform bbox network coords to input image coordinates
-                // TODO: reformulate using less divisions
-                detection.bbox.x = (detection.bbox.x - (m_net_in_w - new_w)/2./m_net_in_w) / (new_w / static_cast<float>(m_net_in_w)) * image_w;
-                detection.bbox.y = (detection.bbox.y - (m_net_in_h - new_h)/2./m_net_in_h) / (new_h / static_cast<float>(m_net_in_h)) * image_h;
-                detection.bbox.width  *= m_net_in_w / static_cast<float>(new_w) * image_w;
-                detection.bbox.height *= m_net_in_h / static_cast<float>(new_h) * image_h;
+                detection.bbox.x = ((detection.bbox.x * m_net_in_w - (m_net_in_w - new_w) / 2.0) * image_w) / new_w;
+                detection.bbox.y = ((detection.bbox.y * m_net_in_h - (m_net_in_h - new_h) / 2.0) * image_h) / new_h;
+                detection.bbox.width  *= (m_net_in_w * image_w) / new_w;
+                detection.bbox.height *= (m_net_in_h * image_h) / new_h;
 
                 // extract class label and prob of highest class prob
                 detection.probability = 0;
