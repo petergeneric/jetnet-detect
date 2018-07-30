@@ -3,6 +3,8 @@
 
 #include "bgr8_letterbox_pre_processor.h"
 #include "detection.h"
+#include "fake_post_processor.h"
+#include "fake_pre_processor.h"
 #include "gpu_blob.h"
 #include "nms.h"
 #include "post_processor.h"

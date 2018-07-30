@@ -2,6 +2,8 @@ set (HEADERS
     jetnet.h
     data/bgr8_letterbox_pre_processor.h
     data/detection.h
+    data/fake_post_processor.h
+    data/fake_pre_processor.h
     data/nms.h
     data/post_processor.h
     data/pre_processor.h
@@ -27,6 +29,8 @@ set (HEADERS
 
 set (SOURCES
     data/bgr8_letterbox_pre_processor.cpp
+    data/fake_post_processor.cpp
+    data/fake_pre_processor.cpp
     data/nms.cpp
     data/yolo_post_processor.cpp
     engine/model_builder.cpp
