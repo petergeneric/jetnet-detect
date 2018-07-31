@@ -14,13 +14,15 @@ using namespace jetnet;
 
 static bool g_enable_profiling;
 
-static bool show_result(const cv::Mat& image, const std::vector<Detection>& detections)
+static bool show_result(const std::vector<cv::Mat>& images, const std::vector<std::vector<Detection>>& detections)
 {
-    cv::Mat out = image.clone();
-    draw_detections(detections, out);
-    if (!g_enable_profiling) {
-        cv::imshow("result", out);
-        cv::waitKey(0);
+    for (size_t i=0; i<images.size(); ++i) {
+        cv::Mat out = images[i].clone();
+        draw_detections(detections[i], out);
+        if (!g_enable_profiling) {
+            cv::imshow("result", out);
+            cv::waitKey(0);
+        }
     }
 
     return true;

@@ -29,7 +29,7 @@ public:
         std::vector<std::string> class_names;   // class names list. Its length is used to determine the number of classes
     };
 
-    typedef std::function<bool(const cv::Mat&, const std::vector<Detection>&)> CbFunction;
+    typedef std::function<bool(const std::vector<cv::Mat>&, const std::vector<std::vector<Detection>>&)> CbFunction;
 
     /*
      *  input_blob_name:        name of the input tensor. Needed to know the input dimensions of the network
@@ -69,7 +69,8 @@ private:
         std::vector<std::string> class_names;
     };
 
-    void get_region_detections(const float* input, int image_w, int image_h, const OutputSpecInt& net_out,
+    void process(const std::vector<cv::Mat>& images, int batch);
+    void get_detections(const float* input, int image_w, int image_h, const OutputSpecInt& net_out,
                                               std::vector<Detection>& detections);
 
     std::string m_input_blob_name;
@@ -83,8 +84,10 @@ private:
     int m_net_in_w;
     int m_net_in_h;
     std::vector<OutputSpecInt> m_output_specs_int;
-    std::vector<float> m_cpu_blob;
     std::function<float(float, float, float, float)> m_calc_box_size;
+
+    std::map<int, std::vector<float>> m_cpu_blobs;
+    std::vector<std::vector<Detection>> m_detections;
 };
 
 }
