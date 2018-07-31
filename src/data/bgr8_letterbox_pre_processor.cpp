@@ -87,12 +87,16 @@ bool Bgr8LetterBoxPreProcessor::bgr8_to_tensor_data(const cv::Mat& input, float*
 
             roi_image = cv::cuda::GpuMat(m_image_resized, rect_image);
             roi_image_float = cv::cuda::GpuMat(m_image_resized_float, rect_image);          // image area
-            roi_greyborder1 = cv::cuda::GpuMat(m_image_resized_float, rect_greyborder1);    // grey area top/left
-            roi_greyborder2 = cv::cuda::GpuMat(m_image_resized_float, rect_greyborder2);    // grey area bottom/right
 
-            // paint borders grey
-            roi_greyborder1.setTo(border_color);
-            roi_greyborder2.setTo(border_color);
+            // safety check to avoid setTo on empty Mat
+            if (rect_greyborder1.area() != 0) {
+                roi_greyborder1 = cv::cuda::GpuMat(m_image_resized_float, rect_greyborder1);    // grey area top/left
+                roi_greyborder2 = cv::cuda::GpuMat(m_image_resized_float, rect_greyborder2);    // grey area bottom/right
+
+                // paint borders grey
+                roi_greyborder1.setTo(border_color);
+                roi_greyborder2.setTo(border_color);
+            }
 
         } else {
             // only resize
