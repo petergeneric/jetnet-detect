@@ -127,7 +127,7 @@ bool YoloPostProcessor::operator()(const std::vector<cv::Mat>& images, const std
 
     // start a thread per image
     for (size_t batch=0; batch<images.size(); ++batch) {
-        threads[batch] = std::thread([this, images, batch]()
+        threads[batch] = std::thread([=, &images]()
                                      { this->process(images, batch); });
     }
 
