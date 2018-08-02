@@ -1,13 +1,14 @@
 # Jetnet
 <img src="jetnet_logo.png" alt="Logo" width="250">
 
-Super fast TensorRT implementation of YOLOv2
+Super fast TensorRT implementation of YOLOv2 and YOLOv3
 
-| Platform             | FP32 mode    | FP16 mode |
+| YOLOv2               | FP32 mode    | FP16 mode |
 |:---------------------|:-------------|:----------|
 | JETSON TX2           | 18.5 FPS     | 27 FPS    |
 | GTX1080              | 220 FPS      | N.A.      |
 
+TODO: extend yolov2 stats with batch=1 and batch>1 and add the same stats for yolov3
 
 NOTE: stats without pre/post processing, 416x416 input resolution
 
@@ -15,6 +16,7 @@ NOTE: stats without pre/post processing, 416x416 input resolution
 
 Dependencies:
 
+* cmake 3.8+
 * TensorRT 3.0.2 (also works with TensorRT 4.0.1.6)
 * OpenCV 3.X
 
@@ -52,13 +54,13 @@ make install
 FP32 mode:
 
 ```
-jetnet_build_yolov2 darknet_weights_file.weights out.plan
+jetnet_build_yolovX darknet_weights_file.weights out.plan
 ```
 
 FP16 mode:
 
 ```
-jetnet_run_yolov2 darknet_weights_file.weights out.plan --fp16
+jetnet_run_yolovX darknet_weights_file.weights out.plan --fp16
 ```
 
 Building might take a while depending on the speed of your target
@@ -69,7 +71,20 @@ the build folder.
 ## Running a compiled network
 
 ```
-jetnet_run_yolov2 out.plan names_file.names input_image.jpg
+jetnet_run_yolovX out.plan names_file.names input_image.jpg
 ```
 
-The current example will run the input image once while printing preprocessing, network execution and postprocessing times in seconds, showing the detection result in a window at the end.
+Profiling:
+
+```
+jetnet_run_yolovX out.plan names_file.names input_image.jpg --profile
+```
+
+When profiling, the network will run the input image 10 times through the network, printing execution times
+of pre-processing, post-processing, and network inference. Each network layer is also profiled and printed.
+
+Change batch size:
+
+```
+jetnet_run_yolovX out.plan names_file.names input_image.jpg --batch=8
+```
