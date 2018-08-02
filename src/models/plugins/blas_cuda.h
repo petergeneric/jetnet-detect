@@ -1,5 +1,5 @@
-#ifndef BLAS_CUDA_H
-#define BLAS_CUDA_H
+#ifndef JETNET_BLAS_CUDA_H
+#define JETNET_BLAS_CUDA_H
 
 namespace jetnet
 {
@@ -15,4 +15,4 @@ namespace jetnet
     void upsample_gpu(const float *in, int w, int h, int c, int batch, int stride, float *out);
 }
 
-#endif /* BLAS_CUDA_H */
+#endif /* JETNET_BLAS_CUDA_H */

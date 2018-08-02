@@ -1,5 +1,5 @@
-#ifndef FAKE_POST_PROCESSOR_H
-#define FAKE_POST_PROCESSOR_H
+#ifndef JETNET_FAKE_POST_PROCESSOR_H
+#define JETNET_FAKE_POST_PROCESSOR_H
 
 #include "logger.h"
 #include "gpu_blob.h"
@@ -31,4 +31,4 @@ private:
 
 }
 
-#endif /* FAKE_POST_PROCESSOR_H */
+#endif /* JETNET_FAKE_POST_PROCESSOR_H */

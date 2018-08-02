@@ -1,5 +1,5 @@
-#ifndef YOLOV3_BUILDER_H
-#define YOLOV3_BUILDER_H
+#ifndef JETNET_YOLOV3_BUILDER_H
+#define JETNET_YOLOV3_BUILDER_H
 
 #include "model_builder.h"
 #include "darknet_weights_loader.h"
@@ -66,4 +66,4 @@ private:
 
 }
 
-#endif /* YOLOV3_BUILDER_H */
+#endif /* JETNET_YOLOV3_BUILDER_H */

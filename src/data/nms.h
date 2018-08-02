@@ -1,5 +1,5 @@
-#ifndef NMS_H
-#define NMS_H
+#ifndef JETNET_NMS_H
+#define JETNET_NMS_H
 
 #include "detection.h"
 #include <opencv2/opencv.hpp>
@@ -23,4 +23,4 @@ namespace jetnet
     void nms(std::vector<Detection>& detections, float thresh);
 }
 
-#endif /* NMS_H */
+#endif /* JETNET_NMS_H */

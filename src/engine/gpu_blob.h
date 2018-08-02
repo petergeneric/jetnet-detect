@@ -1,5 +1,5 @@
-#ifndef GPU_BLOB_H
-#define GPU_BLOB_H
+#ifndef JETNET_GPU_BLOB_H
+#define JETNET_GPU_BLOB_H
 
 #include <cstdlib>
 #include <vector>
@@ -62,4 +62,4 @@ private:
 
 }
 
-#endif /* GPU_BLOB_H */
+#endif /* JETNET_GPU_BLOB_H */

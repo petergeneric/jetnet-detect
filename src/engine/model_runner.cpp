@@ -1,6 +1,7 @@
 #include "model_runner.h"
 #include "file_io.h"
 #include "custom_assert.h"
+#include <cuda_runtime.h>
 #include <chrono>
 
 using namespace jetnet;

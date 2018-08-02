@@ -1,5 +1,5 @@
-#ifndef MODEL_RUNNER_H
-#define MODEL_RUNNER_H
+#ifndef JETNET_MODEL_RUNNER_H
+#define JETNET_MODEL_RUNNER_H
 
 #include "logger.h"
 #include "pre_processor.h"
@@ -8,7 +8,6 @@
 #include "profiler.h"
 #include <opencv2/opencv.hpp>
 #include <NvInfer.h>
-#include <cuda_runtime.h>
 #include <memory>
 #include <vector>
 #include <map>
@@ -77,4 +76,4 @@ private:
 
 }
 
-#endif /* MODEL_RUNNER_H */
+#endif /* JETNET_MODEL_RUNNER_H */

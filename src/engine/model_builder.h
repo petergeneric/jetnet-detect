@@ -1,5 +1,5 @@
-#ifndef MODEL_BUILDER_H
-#define MODEL_BUILDER_H
+#ifndef JETNET_MODEL_BUILDER_H
+#define JETNET_MODEL_BUILDER_H
 
 #include "logger.h"
 #include <NvInfer.h>
@@ -70,4 +70,4 @@ protected:
 
 }
 
-#endif /* MODEL_BUILDER_H */
+#endif /* JETNET_MODEL_BUILDER_H */

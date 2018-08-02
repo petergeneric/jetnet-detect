@@ -1,5 +1,5 @@
-#ifndef FILE_IO_H
-#define FILE_IO_H
+#ifndef JETNET_FILE_IO_H
+#define JETNET_FILE_IO_H
 
 #include <string>
 #include <vector>
@@ -34,4 +34,4 @@ namespace jetnet
     bool save_tensor_text(const float* data, size_t size, std::string filename);
 };
 
-#endif /* FILE_IO_H */
+#endif /* JETNET_FILE_IO_H */

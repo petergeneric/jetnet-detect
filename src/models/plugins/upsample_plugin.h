@@ -1,5 +1,5 @@
-#ifndef UPSAMPLE_PLUGIN_H
-#define UPSAMPLE_PLUGIN_H
+#ifndef JETNET_UPSAMPLE_PLUGIN_H
+#define JETNET_UPSAMPLE_PLUGIN_H
 
 #include <NvInferPlugin.h>
 #include <cuda_runtime.h>
@@ -43,4 +43,4 @@ private:
 
 }
 
-#endif /* UPSAMPLE_PLUGIN_H */
+#endif /* JETNET_UPSAMPLE_PLUGIN_H */

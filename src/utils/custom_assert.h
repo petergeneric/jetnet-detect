@@ -1,5 +1,5 @@
-#ifndef GPU_ASSERT_H
-#define GPU_ASSERT_H
+#ifndef JETNET_GPU_ASSERT_H
+#define JETNET_GPU_ASSERT_H
 
 #include <iostream>
 #include <cuda_runtime.h>
@@ -26,4 +26,4 @@ inline void fatal_error(const char* file, int line, const char* msg)
 
 }
 
-#endif /* GPU_ASSERT_H */
+#endif /* JETNET_GPU_ASSERT_H */

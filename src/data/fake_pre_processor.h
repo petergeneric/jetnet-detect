@@ -1,5 +1,5 @@
-#ifndef FAKE_PRE_PROCESSOR_H
-#define FAKE_PRE_PROCESSOR_H
+#ifndef JETNET_FAKE_PRE_PROCESSOR_H
+#define JETNET_FAKE_PRE_PROCESSOR_H
 
 #include "pre_processor.h"
 #include <opencv2/opencv.hpp>
@@ -30,4 +30,4 @@ private:
 
 }
 
-#endif /* FAKE_PRE_PROCESSOR_H */
+#endif /* JETNET_FAKE_PRE_PROCESSOR_H */

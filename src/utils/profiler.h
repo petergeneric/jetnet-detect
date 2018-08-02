@@ -1,5 +1,5 @@
-#ifndef PROFILER_H
-#define PROFILER_H
+#ifndef JETNET_PROFILER_H
+#define JETNET_PROFILER_H
 
 #include <NvInfer.h>
 #include <vector>
@@ -41,4 +41,4 @@ private:
 
 }
 
-#endif /* PROFILER_H */
+#endif /* JETNET_PROFILER_H */

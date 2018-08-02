@@ -1,5 +1,5 @@
-#ifndef LEAKY_RELU_NATIVE_H
-#define LEAKY_RELU_NATIVE_H
+#ifndef JETNET_LEAKY_RELU_NATIVE_H
+#define JETNET_LEAKY_RELU_NATIVE_H
 
 #include "leaky_relu.h"
 #include "fp16.h"
@@ -34,4 +34,4 @@ private:
 
 }
 
-#endif /* LEAKY_RELU_NATIVE_H */
+#endif /* JETNET_LEAKY_RELU_NATIVE_H */

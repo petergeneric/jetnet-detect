@@ -1,5 +1,5 @@
-#ifndef YOLO_POST_PROCESSOR_H
-#define YOLO_POST_PROCESSOR_H
+#ifndef JETNET_YOLO_POST_PROCESSOR_H
+#define JETNET_YOLO_POST_PROCESSOR_H
 
 #include "logger.h"
 #include "gpu_blob.h"
@@ -92,4 +92,4 @@ private:
 
 }
 
-#endif /* YOLO_POST_PROCESSOR_H */
+#endif /* JETNET_YOLO_POST_PROCESSOR_H */

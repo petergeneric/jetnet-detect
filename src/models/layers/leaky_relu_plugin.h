@@ -1,5 +1,5 @@
-#ifndef LEAKY_RELU_PLUGIN_H
-#define LEAKY_RELU_PLUGIN_H
+#ifndef JETNET_LEAKY_RELU_PLUGIN_H
+#define JETNET_LEAKY_RELU_PLUGIN_H
 
 #include "leaky_relu.h"
 #include <NvInferPlugin.h>
@@ -21,4 +21,4 @@ private:
 
 }
 
-#endif /* LEAKY_RELU_PLUGIN_H */
+#endif /* JETNET_LEAKY_RELU_PLUGIN_H */

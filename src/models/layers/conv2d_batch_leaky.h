@@ -1,5 +1,5 @@
-#ifndef CONV2D_BATCH_LEAKY_H
-#define CONV2D_BATCH_LEAKY_H
+#ifndef JETNET_CONV2D_BATCH_LEAKY_H
+#define JETNET_CONV2D_BATCH_LEAKY_H
 
 #include "leaky_relu_plugin.h"
 #include "leaky_relu_native.h"
@@ -42,4 +42,4 @@ private:
 
 }
 
-#endif /* CONV2D_BATCH_LEAKY_H */
+#endif /* JETNET_CONV2D_BATCH_LEAKY_H */
