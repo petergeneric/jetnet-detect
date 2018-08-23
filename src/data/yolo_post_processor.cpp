@@ -1,5 +1,6 @@
 #include "yolo_post_processor.h"
 #include <cmath>
+#include <thread>
 
 using namespace jetnet;
 using namespace nvinfer1;
@@ -59,7 +60,11 @@ bool YoloPostProcessor::init(const ICudaEngine* engine)
 
     switch(m_network_type) {
         case Type::Yolov2:
-            m_wh_activation = [](float x) { return exp(x); };
+            m_calc_box_size = [](float x, float prior, float in_size, float out_size)
+                                {
+                                    (void)in_size;
+                                    return (exp(x) * prior) / out_size;
+                                };
 
             if (m_output_specs.size() != 1) {
                 m_logger->log(ILogger::Severity::kERROR, "Running YOLOv2, expecting only one output spec, got " +
@@ -72,7 +77,11 @@ bool YoloPostProcessor::init(const ICudaEngine* engine)
             // for yolov3, also the width/height output maps are sigmoid applied. To get the final
             // width/height values we need exp(x) where x is the output of the last conv layer (without sigmoid)
             // we can prove that exp(x) = s(x) / (1 - s(x)) where s is the sigmoid operator
-            m_wh_activation = [](float x) { return x / (1.0 - x); };
+            m_calc_box_size = [](float x, float prior, float in_size, float out_size)
+                                {
+                                    (void)out_size;
+                                    return (prior * x) / ((1.0 - x) * in_size);
+                                };
 
             if (m_output_specs.size() != 3) {
                 m_logger->log(ILogger::Severity::kERROR, "Running YOLOv3, expecting three output specs, got " +
@@ -99,33 +108,61 @@ bool YoloPostProcessor::init(const ICudaEngine* engine)
 
 bool YoloPostProcessor::operator()(const std::vector<cv::Mat>& images, const std::map<int, GpuBlob>& output_blobs)
 {
-    // iterate over all images
-    for (size_t i=0; i<images.size(); i++) {
-        std::vector<Detection> detections;
+    std::vector<std::thread> threads(images.size());
 
-        // iterate over all network outputs
-        for (auto& output_spec_int : m_output_specs_int) {
-            const int out_batch_step = output_spec_int.w * output_spec_int.h * output_spec_int.c;
-            output_blobs.at(output_spec_int.blob_index).download(m_cpu_blob);
+    // download blob data to CPU for every network output (each blob contains data for multiple batches)
+    for (auto& output_spec_int : m_output_specs_int) {
+        const int index = output_spec_int.blob_index;
 
-            get_region_detections(&m_cpu_blob.data()[i * out_batch_step], images[i].cols, images[i].rows, 
-                                  output_spec_int, detections);
+        // create index key if it does not exists
+        if (m_cpu_blobs.find(index) == m_cpu_blobs.end()) {
+            m_cpu_blobs.insert(std::pair<int, std::vector<float>>(index, std::vector<float>()));
         }
 
-        if (m_nms)
-            m_nms(detections);
+        output_blobs.at(index).download(m_cpu_blobs.at(index));
+    }
 
-        // run user callback
-        if (m_cb && !m_cb(images[i], detections)) {
-            m_logger->log(ILogger::Severity::kERROR, "Post-processing callback failed");
-            return false;
-        }
+    if (m_detections.size() != images.size())
+        m_detections.resize(images.size());
+
+    // start a thread per image
+    for (size_t batch=0; batch<images.size(); ++batch) {
+        threads[batch] = std::thread([=, &images]()
+                                     { this->process(images, batch); });
+    }
+
+    // wait for all threads to complete
+    for (size_t batch=0; batch<images.size(); ++batch) {
+        threads[batch].join();
+    }
+
+    if (m_cb && !m_cb(images, m_detections)) {
+        m_logger->log(ILogger::Severity::kERROR, "Post-processing callback failed");
+        return false;
     }
 
     return true;
 }
 
-void YoloPostProcessor::get_region_detections(const float* input, int image_w, int image_h, const OutputSpecInt& net_out,
+void YoloPostProcessor::process(const std::vector<cv::Mat>& images, int batch)
+{
+    std::vector<Detection> detections;
+
+    // iterate over all network outputs and retrieve there results
+    for (auto& output_spec_int : m_output_specs_int) {
+        const int out_batch_step = output_spec_int.w * output_spec_int.h * output_spec_int.c;
+
+        get_detections(&m_cpu_blobs.at(output_spec_int.blob_index).data()[batch * out_batch_step],
+                       images[batch].cols, images[batch].rows, output_spec_int, detections);
+    }
+
+    if (m_nms)
+        m_nms(detections);
+
+    m_detections[batch] = detections;
+}
+
+void YoloPostProcessor::get_detections(const float* input, int image_w, int image_h, const OutputSpecInt& net_out,
                                               std::vector<Detection>& detections)
 {
     int x, y, anchor, cls;
@@ -161,17 +198,18 @@ void YoloPostProcessor::get_region_detections(const float* input, int image_w, i
                 // extract box
                 detection.bbox.x = (x + input[index]) / net_out.w;
                 detection.bbox.y = (y + input[index + out_channel_step]) / net_out.h;
-                const float w = m_wh_activation(input[index + 2 * out_channel_step]);
-                const float h = m_wh_activation(input[index + 3 * out_channel_step]);
-                detection.bbox.width =  w * net_out.anchor_priors[2 * anchor] / net_out.w;
-                detection.bbox.height = h * net_out.anchor_priors[2 * anchor + 1] / net_out.h;
+                detection.bbox.width = m_calc_box_size(input[index + 2 * out_channel_step],
+                                                       net_out.anchor_priors[2 * anchor],
+                                                       m_net_in_w, net_out.w);
+                detection.bbox.height = m_calc_box_size(input[index + 3 * out_channel_step],
+                                                       net_out.anchor_priors[2 * anchor + 1],
+                                                       m_net_in_h, net_out.h);
 
                 // transform bbox network coords to input image coordinates
-                // TODO: reformulate using less divisions
-                detection.bbox.x = (detection.bbox.x - (m_net_in_w - new_w)/2./m_net_in_w) / (new_w / static_cast<float>(m_net_in_w)) * image_w;
-                detection.bbox.y = (detection.bbox.y - (m_net_in_h - new_h)/2./m_net_in_h) / (new_h / static_cast<float>(m_net_in_h)) * image_h;
-                detection.bbox.width  *= m_net_in_w / static_cast<float>(new_w) * image_w;
-                detection.bbox.height *= m_net_in_h / static_cast<float>(new_h) * image_h;
+                detection.bbox.x = ((detection.bbox.x * m_net_in_w - (m_net_in_w - new_w) / 2.0) * image_w) / new_w;
+                detection.bbox.y = ((detection.bbox.y * m_net_in_h - (m_net_in_h - new_h) / 2.0) * image_h) / new_h;
+                detection.bbox.width  *= (m_net_in_w * image_w) / new_w;
+                detection.bbox.height *= (m_net_in_h * image_h) / new_h;
 
                 // extract class label and prob of highest class prob
                 detection.probability = 0;

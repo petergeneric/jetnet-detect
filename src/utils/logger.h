@@ -1,5 +1,5 @@
-#ifndef LOGGER_H
-#define LOGGER_H
+#ifndef JETNET_LOGGER_H
+#define JETNET_LOGGER_H
 
 #include <string>
 #include <NvInfer.h>
@@ -21,4 +21,4 @@ namespace jetnet
     };
 }
 
-#endif /* LOGGER_H */
+#endif /* JETNET_LOGGER_H */

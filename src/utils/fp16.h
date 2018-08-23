@@ -1,5 +1,5 @@
-#ifndef FP16_H
-#define FP16_H
+#ifndef JETNET_FP16_H
+#define JETNET_FP16_H
 
 #include <cublas_v2.h>
 
@@ -19,4 +19,4 @@ float __half2float(__half h);
 
 }
 
-#endif /* FP16_H */
+#endif /* JETNET_FP16_H */

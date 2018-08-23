@@ -1,5 +1,5 @@
-#ifndef PRE_PROCESSOR_H
-#define PRE_PROCESSOR_H
+#ifndef JETNET_PRE_PROCESSOR_H
+#define JETNET_PRE_PROCESSOR_H
 
 #include "gpu_blob.h"
 #include <opencv2/opencv.hpp>
@@ -31,4 +31,4 @@ public:
 
 }
 
-#endif /* PRE_PROCESSOR_H */
+#endif /* JETNET_PRE_PROCESSOR_H */

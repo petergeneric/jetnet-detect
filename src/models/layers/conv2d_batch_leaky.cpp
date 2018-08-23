@@ -3,8 +3,7 @@
 using namespace jetnet;
 using namespace nvinfer1;
 
-//TODO
-#define EPSILON             0.000001f
+#define EPSILON             0.00001f
 
 ILayer* Conv2dBatchLeaky::operator()(std::string name, INetworkDefinition* network, DarknetWeightsLoader& weights, ITensor& input,
                 int nbOutputMaps, DimsHW kernelSize, DimsHW padding, DimsHW stride, float negSlope, std::unique_ptr<ILeakyRelu> act_impl)

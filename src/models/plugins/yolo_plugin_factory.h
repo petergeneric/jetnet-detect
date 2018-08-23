@@ -1,5 +1,5 @@
-#ifndef YOLO_PLUGIN_FACTORY_H
-#define YOLO_PLUGIN_FACTORY_H
+#ifndef JETNET_YOLO_PLUGIN_FACTORY_H
+#define JETNET_YOLO_PLUGIN_FACTORY_H
 
 #include "logger.h"
 #include "upsample_plugin.h"
@@ -51,4 +51,4 @@ private:
 
 }
 
-#endif /* YOLO_PLUGIN_FACTORY_H */
+#endif /* JETNET_YOLO_PLUGIN_FACTORY_H */

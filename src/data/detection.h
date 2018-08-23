@@ -1,5 +1,5 @@
-#ifndef DETECTION_H
-#define DETECTION_H
+#ifndef JETNET_DETECTION_H
+#define JETNET_DETECTION_H
 
 #include <opencv2/opencv.hpp>
 #include <string>
@@ -17,4 +17,4 @@ struct Detection
 
 }
 
-#endif /* DETECTION_H */
+#endif /* JETNET_DETECTION_H */

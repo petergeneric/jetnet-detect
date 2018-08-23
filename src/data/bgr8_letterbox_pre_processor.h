@@ -1,5 +1,5 @@
-#ifndef BGR8_LETTERBOX_PRE_PROCESSOR_H
-#define BGR8_LETTERBOX_PRE_PROCESSOR_H
+#ifndef JETNET_BGR8_LETTERBOX_PRE_PROCESSOR_H
+#define JETNET_BGR8_LETTERBOX_PRE_PROCESSOR_H
 
 #include "pre_processor.h"
 #include "logger.h"
@@ -45,4 +45,4 @@ private:
 
 }
 
-#endif /* BGR8_LETTERBOX_PRE_PROCESSOR_H */
+#endif /* JETNET_BGR8_LETTERBOX_PRE_PROCESSOR_H */

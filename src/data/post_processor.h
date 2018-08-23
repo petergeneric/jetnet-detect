@@ -1,5 +1,5 @@
-#ifndef POST_PROCESSOR_H
-#define POST_PROCESSOR_H
+#ifndef JETNET_POST_PROCESSOR_H
+#define JETNET_POST_PROCESSOR_H
 
 #include "gpu_blob.h"
 #include <opencv2/opencv.hpp>
@@ -31,4 +31,4 @@ public:
 
 }
 
-#endif /* POST_PROCESSOR_H */
+#endif /* JETNET_POST_PROCESSOR_H */

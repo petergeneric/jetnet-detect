@@ -1,5 +1,5 @@
-#ifndef DARKNET_WEIGHTS_LOADER_H
-#define DARKNET_WEIGHTS_LOADER_H
+#ifndef JETNET_DARKNET_WEIGHTS_LOADER_H
+#define JETNET_DARKNET_WEIGHTS_LOADER_H
 
 #include <vector>
 #include <string>
@@ -72,4 +72,4 @@ private:
 
 }
 
-#endif /* DARKNET_WEIGHTS_LOADER_H */
+#endif /* JETNET_DARKNET_WEIGHTS_LOADER_H */

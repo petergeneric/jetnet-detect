@@ -1,5 +1,5 @@
-#ifndef VISUAL_H
-#define VISUAL_H
+#ifndef JETNET_VISUAL_H
+#define JETNET_VISUAL_H
 
 #include "detection.h"
 #include <opencv2/opencv.hpp>
@@ -14,4 +14,4 @@ namespace jetnet
     void draw_detections(const std::vector<Detection>& detections, cv::Mat& image);
 }
 
-#endif /* VISUAL_H */
+#endif /* JETNET_VISUAL_H */
