@@ -3,7 +3,7 @@
 using namespace jetnet;
 using namespace nvinfer1;
 
-#define EPSILON             0.00001f
+#define EPSILON             0.00001L
 
 ILayer* Conv2dBatchLeaky::operator()(std::string name, INetworkDefinition* network, DarknetWeightsLoader& weights, ITensor& input,
                 int nbOutputMaps, DimsHW kernelSize, DimsHW padding, DimsHW stride, float negSlope, std::unique_ptr<ILeakyRelu> act_impl)
@@ -37,9 +37,10 @@ ILayer* Conv2dBatchLeaky::operator()(std::string name, INetworkDefinition* netwo
     std::vector<float> shift_vals(nbOutputMaps);
 
     for (int i=0; i<nbOutputMaps; ++i) {
-        //TODO: replace with double's (and check if output result changes)
-        scale_vals[i] = bn_raw_scales[i] / (sqrt(bn_raw_variances[i]) + EPSILON);
-        shift_vals[i] = -bn_raw_means[i] * scale_vals[i] + biases[i];
+        // cast to double to avoid error buildup in calculations
+        double scale_val = static_cast<double>(bn_raw_scales[i]) / (sqrt(static_cast<double>(bn_raw_variances[i])) + EPSILON);
+        shift_vals[i] = -static_cast<double>(bn_raw_means[i]) * scale_val + static_cast<double>(biases[i]);
+        scale_vals[i] = scale_val;
     }
 
     const Weights bn_scales = weights.get(scale_vals);
