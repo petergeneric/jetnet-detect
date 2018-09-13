@@ -28,29 +28,15 @@ static int get_coco_image_id(const char *filename)
     return atoi(p+1);
 }
 
-static void print_cocos(FILE *fp, std::string image_name, std::vector<Detection> detections, int image_w, int image_h)
+static void print_cocos(FILE *fp, std::string image_name, std::vector<Detection> detections)
 {
     int image_id = get_coco_image_id(image_name.c_str());
 
     for (auto detection : detections) {
-        float xmin = detection.bbox.x - detection.bbox.width/2.;
-        float xmax = detection.bbox.x + detection.bbox.width/2.;
-        float ymin = detection.bbox.y - detection.bbox.height/2.;
-        float ymax = detection.bbox.y + detection.bbox.height/2.;
-
-        if (xmin < 0) xmin = 0;
-        if (ymin < 0) ymin = 0;
-        if (xmax > image_w) xmax = image_w;
-        if (ymax > image_h) ymax = image_h;
-
-        float bx = xmin;
-        float by = ymin;
-        float bw = xmax - xmin;
-        float bh = ymax - ymin;
-
         for (size_t i=0; i<detection.probabilities.size(); ++i) {
             fprintf(fp, "{\"image_id\":%d, \"category_id\":%d, \"bbox\":[%f, %f, %f, %f], \"score\":%f},\n", image_id,
-                    coco_ids[detection.class_label_indices[i]], bx, by, bw, bh, detection.probabilities[i]);
+                    coco_ids[detection.class_label_indices[i]], detection.bbox.x, detection.bbox.y, detection.bbox.width,
+                    detection.bbox.height, detection.probabilities[i]);
         }
     }
 }
@@ -173,8 +159,7 @@ int main(int argc, char** argv)
         // write detections to output file
         for (size_t i=0; i<images.size(); ++i) {
             auto image_name = paths_in_batch[i];
-            auto image = images[i];
-            print_cocos(f, image_name, detections[i], image.cols, image.rows);
+            print_cocos(f, image_name, detections[i]);
         }
 
         // print stats

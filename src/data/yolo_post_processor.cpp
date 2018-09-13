@@ -209,6 +209,22 @@ void YoloPostProcessor::calc_detections(const float* input, int image_w, int ima
                 detection.bbox.width  *= (m_net_in_w * image_w) / new_w;
                 detection.bbox.height *= (m_net_in_h * image_h) / new_h;
 
+                // clip bboxes to image boundaries and convert x,y to top left corner
+                float xmin = detection.bbox.x - detection.bbox.width/2.;
+                float xmax = detection.bbox.x + detection.bbox.width/2.;
+                float ymin = detection.bbox.y - detection.bbox.height/2.;
+                float ymax = detection.bbox.y + detection.bbox.height/2.;
+
+                if (xmin < 0) xmin = 0;
+                if (ymin < 0) ymin = 0;
+                if (xmax > image_w) xmax = image_w;
+                if (ymax > image_h) ymax = image_h;
+
+                detection.bbox.x = xmin;
+                detection.bbox.y = ymin;
+                detection.bbox.width = xmax - xmin;
+                detection.bbox.height = ymax - ymin;
+
                 // extract class label and prob of highest class prob
                 detection.probability = 0;
                 for (cls=0; cls < net_out.classes; ++cls) {

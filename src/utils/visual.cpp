@@ -30,10 +30,9 @@ void jetnet::draw_detections(const std::vector<Detection>& detections, cv::Mat& 
     int number_of_colors = colors.size();
 
     for (auto detection : detections) {
-        cv::Point left_top(     std::max(0, static_cast<int>(detection.bbox.x - (detection.bbox.width / 2))),
-                                std::max(0, static_cast<int>(detection.bbox.y - (detection.bbox.height / 2))));
-        cv::Point right_bottom( std::min(static_cast<int>(detection.bbox.x + (detection.bbox.width / 2)), image.cols - 1),
-                                std::min(static_cast<int>(detection.bbox.y + (detection.bbox.height / 2)), image.rows - 1));
+        cv::Point left_top(     static_cast<int>(detection.bbox.x), static_cast<int>(detection.bbox.y));
+        cv::Point right_bottom( static_cast<int>(detection.bbox.x + detection.bbox.width),
+                                static_cast<int>(detection.bbox.y + detection.bbox.height));
 
         cv::Scalar color(colors[detection.class_label_index % number_of_colors]);
         std::string text(std::to_string(static_cast<int>(detection.probability * 100)) + "% " + detection.class_label);
