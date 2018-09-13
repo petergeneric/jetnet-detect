@@ -12,7 +12,9 @@ struct Detection
     cv::Rect2f bbox;
     int class_label_index;
     std::string class_label;
-    float probability;
+    float probability;                      // most probable one (equals probabilities[class_label_index])
+    std::vector<float> probabilities;       // all probabilities above threshold
+    std::vector<int> class_label_indices;   // corresponding class label indices
 };
 
 }

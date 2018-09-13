@@ -215,7 +215,13 @@ void YoloPostProcessor::get_detections(const float* input, int image_w, int imag
                 detection.probability = 0;
                 for (cls=0; cls < net_out.classes; ++cls) {
                     float prob = objectness * input[index + (1 + net_out.coords + cls) * out_channel_step];
-                    if (prob > m_thresh && prob > detection.probability) {
+                    if (prob <= m_thresh)
+                        continue;
+
+                    detection.probabilities.push_back(prob);
+                    detection.class_label_indices.push_back(cls);
+
+                    if (prob > detection.probability) {
                         detection.class_label_index = cls;
                         detection.class_label = net_out.class_names[cls];
                         detection.probability = prob;

@@ -9,7 +9,7 @@ add_executable (jetnet_build_yolov2 build_yolov2.cpp)
 add_executable (jetnet_build_yolov3 build_yolov3.cpp)
 add_executable (jetnet_run_yolov2 run_yolov2.cpp)
 add_executable (jetnet_run_yolov3 run_yolov3.cpp)
-add_executable (jetnet_validate_yolov3 validate_yolov3.cpp)
+add_executable (jetnet_validate_yolov3 validate_yolov3.cpp fast_image_reader.cpp)
 
 install (TARGETS
     jetnet_build_yolov2
