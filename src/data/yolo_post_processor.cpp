@@ -10,14 +10,12 @@ YoloPostProcessor::YoloPostProcessor(std::string input_blob_name,
                         std::vector<OutputSpec> output_specs,
                         float thresh,
                         std::shared_ptr<Logger> logger,
-                        CbFunction cb,
                         NmsFunction nms) :
     m_input_blob_name(input_blob_name),
     m_network_type(network_type),
     m_output_specs(output_specs),
     m_thresh(thresh),
     m_logger(logger),
-    m_cb(cb),
     m_nms(nms)
 {
 }
@@ -106,9 +104,9 @@ bool YoloPostProcessor::init(const ICudaEngine* engine)
     return true;
 }
 
-bool YoloPostProcessor::operator()(const std::vector<cv::Mat>& images, const std::map<int, GpuBlob>& output_blobs)
+bool YoloPostProcessor::operator()(const std::map<int, GpuBlob>& output_blobs, const std::vector<cv::Size>& image_sizes)
 {
-    std::vector<std::thread> threads(images.size());
+    std::vector<std::thread> threads(image_sizes.size());
 
     // download blob data to CPU for every network output (each blob contains data for multiple batches)
     for (auto& output_spec_int : m_output_specs_int) {
@@ -122,29 +120,29 @@ bool YoloPostProcessor::operator()(const std::vector<cv::Mat>& images, const std
         output_blobs.at(index).download(m_cpu_blobs.at(index));
     }
 
-    if (m_detections.size() != images.size())
-        m_detections.resize(images.size());
+    if (m_detections.size() != image_sizes.size())
+        m_detections.resize(image_sizes.size());
 
     // start a thread per image
-    for (size_t batch=0; batch<images.size(); ++batch) {
-        threads[batch] = std::thread([=, &images]()
-                                     { this->process(images, batch); });
+    for (size_t batch=0; batch<image_sizes.size(); ++batch) {
+        threads[batch] = std::thread([=, &image_sizes]()
+                                     { this->process(image_sizes, batch); });
     }
 
     // wait for all threads to complete
-    for (size_t batch=0; batch<images.size(); ++batch) {
+    for (size_t batch=0; batch<image_sizes.size(); ++batch) {
         threads[batch].join();
-    }
-
-    if (m_cb && !m_cb(images, m_detections)) {
-        m_logger->log(ILogger::Severity::kERROR, "Post-processing callback failed");
-        return false;
     }
 
     return true;
 }
 
-void YoloPostProcessor::process(const std::vector<cv::Mat>& images, int batch)
+std::vector<std::vector<Detection>> YoloPostProcessor::get_detections()
+{
+    return m_detections;
+}
+
+void YoloPostProcessor::process(const std::vector<cv::Size>& image_sizes, int batch)
 {
     std::vector<Detection> detections;
 
@@ -152,8 +150,8 @@ void YoloPostProcessor::process(const std::vector<cv::Mat>& images, int batch)
     for (auto& output_spec_int : m_output_specs_int) {
         const int out_batch_step = output_spec_int.w * output_spec_int.h * output_spec_int.c;
 
-        get_detections(&m_cpu_blobs.at(output_spec_int.blob_index).data()[batch * out_batch_step],
-                       images[batch].cols, images[batch].rows, output_spec_int, detections);
+        calc_detections(&m_cpu_blobs.at(output_spec_int.blob_index).data()[batch * out_batch_step],
+                       image_sizes[batch].width, image_sizes[batch].height, output_spec_int, detections);
     }
 
     if (m_nms)
@@ -162,7 +160,7 @@ void YoloPostProcessor::process(const std::vector<cv::Mat>& images, int batch)
     m_detections[batch] = detections;
 }
 
-void YoloPostProcessor::get_detections(const float* input, int image_w, int image_h, const OutputSpecInt& net_out,
+void YoloPostProcessor::calc_detections(const float* input, int image_w, int image_h, const OutputSpecInt& net_out,
                                               std::vector<Detection>& detections)
 {
     int x, y, anchor, cls;

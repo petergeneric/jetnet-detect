@@ -4,9 +4,9 @@
 using namespace jetnet;
 using namespace nvinfer1;
 
-FakePreProcessor::FakePreProcessor(std::string input_blob_name, std::string tensor_file_name) :
+FakePreProcessor::FakePreProcessor(std::string input_blob_name, std::shared_ptr<Logger> logger) :
     m_input_blob_name(input_blob_name),
-    m_tensor_file_name(tensor_file_name)
+    m_logger(logger)
 {
 }
 
@@ -23,33 +23,42 @@ bool FakePreProcessor::init(const nvinfer1::ICudaEngine* engine)
     return true;
 }
 
-bool FakePreProcessor::operator()(const std::vector<cv::Mat>& images, std::map<int, GpuBlob>& input_blobs)
+void FakePreProcessor::register_tensor_files(std::vector<std::string> file_names)
 {
-    std::vector<std::string> lines;
+    m_file_names = file_names;
+}
 
-    // for now only support loading a tensor with batch size 1
-    if (images.size() != 1) {
-        std::cerr << "Fake: Batch size must be 1" << std::endl;
-        return false;
+bool FakePreProcessor::operator()(std::map<int, GpuBlob>& input_blobs, std::vector<cv::Size>& image_sizes)
+{
+    std::vector<char> batch;
+
+    for (auto file_name : m_file_names) {
+
+        // find image_size in filename
+        const char *wp = strrchr(file_name.c_str(), '_');
+        const char *hp = strrchr(file_name.c_str(), 'x');
+        int width = atoi(wp + 1);
+        int height = atoi(hp + 1);
+        image_sizes.push_back(cv::Size(width, height));
+
+        // read binary file content and insert it into a big batch tensor
+        std::vector<char> data = read_binary_file(file_name);
+
+        if (data.empty()) {
+            m_logger->log(ILogger::Severity::kERROR, "Fake: Failed to read tensor file " + file_name);
+            return false;
+        }
+
+        if (data.size() / sizeof(float) != m_size) {
+            m_logger->log(ILogger::Severity::kERROR, "Fake: Expected tensor file to contain " + std::to_string(m_size) +
+                          " values, bot got " + std::to_string(data.size() / sizeof(float)) + " values");
+            return false;
+        }
+
+        batch.insert(batch.end(), data.begin(), data.end());
     }
 
-    if (!read_text_file(lines, m_tensor_file_name)) {
-        std::cerr << "Fake: Failed to read tensor file" << std::endl;
-        return false;
-    }
-
-    if (lines.size() != m_size) {
-        std::cerr << "Fake: Expected tensor file to contain " << m_size << " values, but got " << lines.size() << std::endl;
-        return false;
-    }
-
-    std::vector<float> data(lines.size());
-
-    for (size_t i=0; i<lines.size(); ++i) {
-        data[i] = std::stof(lines[i]);
-    }
-
-    input_blobs.at(m_input_blob_index).upload(data);
+    input_blobs.at(m_input_blob_index).upload(reinterpret_cast<float*>(&batch[0]), batch.size());
 
     return true;
 }

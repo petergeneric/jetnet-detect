@@ -5,8 +5,6 @@ set (HEADERS
     data/fake_post_processor.h
     data/fake_pre_processor.h
     data/nms.h
-    data/post_processor.h
-    data/pre_processor.h
     data/yolo_post_processor.h
     engine/model_builder.h
     engine/model_runner.h
@@ -35,7 +33,6 @@ set (SOURCES
     data/nms.cpp
     data/yolo_post_processor.cpp
     engine/model_builder.cpp
-    engine/model_runner.cpp
     engine/gpu_blob.cpp
     models/darknet_weights_loader.cpp
     models/yolov2_builder.cpp

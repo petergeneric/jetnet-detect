@@ -12,22 +12,6 @@
 
 using namespace jetnet;
 
-static bool g_enable_profiling;
-
-static bool show_result(const std::vector<cv::Mat>& images, const std::vector<std::vector<Detection>>& detections)
-{
-    for (size_t i=0; i<images.size(); ++i) {
-        cv::Mat out = images[i].clone();
-        draw_detections(detections[i], out);
-        if (!g_enable_profiling) {
-            cv::imshow("result", out);
-            cv::waitKey(0);
-        }
-    }
-
-    return true;
-}
-
 int main(int argc, char** argv)
 {
     std::string keys =
@@ -51,7 +35,7 @@ int main(int argc, char** argv)
     auto input_model_file = parser.get<std::string>("@modelfile");
     auto input_names_file = parser.get<std::string>("@nameslist");
     auto input_image_file = parser.get<std::string>("@inputimage");
-    g_enable_profiling = parser.has("profile");
+    auto enable_profiling = parser.has("profile");
     auto threshold = parser.get<float>("thresh");
     auto nms_threshold = parser.get<float>("nmsthresh");
     auto batch_size = parser.get<int>("batch");
@@ -86,10 +70,9 @@ int main(int argc, char** argv)
                     output_specs,
                     threshold,
                     logger,
-                    show_result,
                     [=](std::vector<Detection>& detections) { nms(detections, nms_threshold); });
 
-    ModelRunner runner(plugin_fact, pre, post, logger, batch_size, g_enable_profiling);
+    ModelRunner<Bgr8LetterBoxPreProcessor, YoloPostProcessor> runner(plugin_fact, pre, post, logger, batch_size, enable_profiling);
     std::vector<cv::Mat> images;
 
     cv::Mat img = cv::imread(input_image_file);
@@ -108,14 +91,24 @@ int main(int argc, char** argv)
         return -1;
     }
 
-    size_t iterations = g_enable_profiling ? 10 : 1;
+    // register images to the preprocessor
+    pre->register_images(images);
 
+    // run pre/infer/post pipeline for a number of times depending on the profiling setting
+    size_t iterations = enable_profiling ? 10 : 1;
     for (size_t i=0; i<iterations; ++i) {
-        if (!runner(images)) {
+        if (!runner()) {
             std::cerr << "Failed to run network" << std::endl;
             return -1;
         }
     }
+
+    // get detections and visualise
+    auto detections = post->get_detections();
+    cv::Mat out = images[0].clone();
+    draw_detections(detections[0], out);
+    cv::imshow("result", out);
+    cv::waitKey(0);
 
     // show profiling if enabled
     runner.print_profiling();

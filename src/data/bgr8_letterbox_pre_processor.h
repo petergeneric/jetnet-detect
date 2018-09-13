@@ -1,17 +1,18 @@
 #ifndef JETNET_BGR8_LETTERBOX_PRE_PROCESSOR_H
 #define JETNET_BGR8_LETTERBOX_PRE_PROCESSOR_H
 
-#include "pre_processor.h"
 #include "logger.h"
+#include "gpu_blob.h"
 #include <opencv2/opencv.hpp>
 #include <NvInfer.h>
 #include <string>
+#include <vector>
 #include <memory>
 
 namespace jetnet
 {
 
-class Bgr8LetterBoxPreProcessor : public IPreProcessor
+class Bgr8LetterBoxPreProcessor
 {
 public:
     /*
@@ -21,8 +22,28 @@ public:
     Bgr8LetterBoxPreProcessor(std::string input_blob_name,
                               std::shared_ptr<Logger> logger);
 
-    bool init(const nvinfer1::ICudaEngine* engine) override;
-    bool operator()(const std::vector<cv::Mat>& images, std::map<int, GpuBlob>& input_blobs) override;
+    /*
+     *  Called by the model runner after network is deserialized
+     *  engine:             reference to deserialized inference engine
+     *  returns True on success
+     */
+    bool init(const nvinfer1::ICudaEngine* engine);
+
+    /*
+     *  Register a set of images to be preprocessed.
+     *  images:             input images. The number of images must be smaller
+     *                      or equal to the maximum supported batch size of the network
+     *  The method returns immediately, actual preprocessing happens later
+     */
+    void register_images(std::vector<cv::Mat> images);
+
+    /*
+     *  Execute post processor called by model runner
+     *  input_blobs (out):  preprocessor result to pass to the input of the network
+     *  image_size  (out):  image sizes (width and height) of the preprocessed images
+     *  returns True on success
+     */
+    bool operator()(std::map<int, GpuBlob>& input_blobs, std::vector<cv::Size>& image_sizes);
 
 private:
     bool bgr8_to_tensor_data(const cv::Mat& input, float* output);
@@ -41,6 +62,7 @@ private:
 
     cv::cuda::GpuMat m_image_resized;
     cv::cuda::GpuMat m_image_resized_float;
+    std::vector<cv::Mat> m_registered_images;
 };
 
 }

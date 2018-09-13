@@ -111,20 +111,14 @@ int main(int argc, char** argv)
         YoloPostProcessor::OutputSpec { OUTPUT_BLOB3_NAME, anchor_priors3, class_names }
     };
 
-    std::vector<std::vector<Detection>> detections;     // post processor will write results here
     auto post = std::make_shared<YoloPostProcessor>(INPUT_BLOB_NAME,
                     YoloPostProcessor::Type::Yolov3,
                     output_specs,
                     threshold,
                     logger,
-                    [&](const std::vector<cv::Mat>& images, const std::vector<std::vector<Detection>>& dets) {
-                        (void)images;
-                        detections = dets;
-                        return true;
-                    },
                     [=](std::vector<Detection>& dets) { nms(dets, nms_threshold); });
 
-    ModelRunner runner(plugin_fact, pre, post, logger, input_batch_size, enable_profiling);
+    ModelRunner<Bgr8LetterBoxPreProcessor, YoloPostProcessor> runner(plugin_fact, pre, post, logger, input_batch_size, enable_profiling);
 
     if (!runner.init(input_model_file)) {
         std::cerr << "Failed to init runner" << std::endl;
@@ -167,10 +161,14 @@ int main(int argc, char** argv)
             }
         }
 
-        if (!runner(images)) {
+        pre->register_images(images);
+
+        if (!runner()) {
             std::cerr << "Failed to run network" << std::endl;
             return -1;
         }
+
+        auto detections = post->get_detections();
 
         // write detections to output file
         for (size_t i=0; i<images.size(); ++i) {

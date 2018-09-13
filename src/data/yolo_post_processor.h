@@ -3,8 +3,8 @@
 
 #include "logger.h"
 #include "gpu_blob.h"
-#include "post_processor.h"
 #include "nms.h"
+#include "detection.h"
 #include <NvInfer.h>
 #include <functional>
 #include <memory>
@@ -14,7 +14,7 @@
 namespace jetnet
 {
 
-class YoloPostProcessor : public IPostProcessor
+class YoloPostProcessor
 {
 public:
     enum class Type {
@@ -29,8 +29,6 @@ public:
         std::vector<std::string> class_names;   // class names list. Its length is used to determine the number of classes
     };
 
-    typedef std::function<bool(const std::vector<cv::Mat>&, const std::vector<std::vector<Detection>>&)> CbFunction;
-
     /*
      *  input_blob_name:        name of the input tensor. Needed to know the input dimensions of the network
      *  output_spec:            A list of network output specifications. Each network output needs one spec. For yolov2,
@@ -38,7 +36,6 @@ public:
      *  thresh:                 detection threshold
      *  class_names:            list of class names. Must have the same length as the number of classes the network supports
      *  logger:                 logger object
-     *  cb:                     optional callback to retrieve the detection results
      *  nms:                    non maxima suppression function
      */
     YoloPostProcessor(std::string input_blob_name,
@@ -46,11 +43,30 @@ public:
                         std::vector<OutputSpec> output_specs,
                         float thresh,
                         std::shared_ptr<Logger> logger,
-                        CbFunction cb,
                         NmsFunction nms);
 
-    bool init(const nvinfer1::ICudaEngine* engine) override;
-    bool operator()(const std::vector<cv::Mat>& images, const std::map<int, GpuBlob>& output_blobs) override;
+    /*
+     *  Called after the network is deserialized
+     *  engine:         containes the deserialized cuda engine
+     *  returns true on success, false on failure
+     */
+    bool init(const nvinfer1::ICudaEngine* engine);
+
+    /* used by model runner template to know the type of the second argument of the operator() function of this class */
+    typedef std::vector<cv::Size> Arg;
+
+    /*
+     *  Actual post-processing
+     *  images:         list of processed images that can be used to draw detection results onto
+     *  output_blobs:   output data from the network that needs post-processing
+     *  returns true on success, false on failure
+     */
+    bool operator()(const std::map<int, GpuBlob>& output_blobs, const std::vector<cv::Size>& image_sizes);
+
+    /*
+     *  Get last batch of postprocessed detections
+     */
+    std::vector<std::vector<Detection>> get_detections();
 
 private:
     // internal output specifications structure
@@ -69,8 +85,8 @@ private:
         std::vector<std::string> class_names;
     };
 
-    void process(const std::vector<cv::Mat>& images, int batch);
-    void get_detections(const float* input, int image_w, int image_h, const OutputSpecInt& net_out,
+    void process(const std::vector<cv::Size>& image_sizes, int batch);
+    void calc_detections(const float* input, int image_w, int image_h, const OutputSpecInt& net_out,
                                               std::vector<Detection>& detections);
 
     std::string m_input_blob_name;
@@ -78,7 +94,6 @@ private:
     std::vector<OutputSpec> m_output_specs;
     float m_thresh;
     std::shared_ptr<Logger> m_logger;
-    CbFunction m_cb;
     NmsFunction m_nms;
 
     int m_net_in_w;

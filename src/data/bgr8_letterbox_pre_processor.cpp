@@ -32,14 +32,20 @@ bool Bgr8LetterBoxPreProcessor::init(const ICudaEngine* engine)
     return true;
 }
 
-bool Bgr8LetterBoxPreProcessor::operator()(const std::vector<cv::Mat>& images, std::map<int, GpuBlob>& input_blobs)
+void Bgr8LetterBoxPreProcessor::register_images(std::vector<cv::Mat> images)
+{
+    m_registered_images = images;
+}
+
+bool Bgr8LetterBoxPreProcessor::operator()(std::map<int, GpuBlob>& input_blobs, std::vector<cv::Size>& image_sizes)
 {
     float* data = reinterpret_cast<float*>(input_blobs.at(m_input_blob_index).get());
 
     // fill all batches of the input blob
-    for (size_t i=0; i<images.size(); i++) {
-        if (!bgr8_to_tensor_data(images[i], &data[i * m_in_batch_step]))
+    for (size_t i=0; i<m_registered_images.size(); i++) {
+        if (!bgr8_to_tensor_data(m_registered_images[i], &data[i * m_in_batch_step]))
             return false;
+        image_sizes.push_back(cv::Size(m_registered_images[i].cols, m_registered_images[i].rows));
     }
 
     return true;
