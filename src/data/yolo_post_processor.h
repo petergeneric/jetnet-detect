@@ -26,7 +26,7 @@ public:
     {
         std::string name;
         std::vector<float> anchor_priors;       // anchor prior pairs. Its length is used to determine the number of anchors
-        std::vector<std::string> class_names;   // class names list. Its length is used to determine the number of classes
+        size_t num_classes;
     };
 
     /*
@@ -34,7 +34,6 @@ public:
      *  output_spec:            A list of network output specifications. Each network output needs one spec. For yolov2,
      *                          only one spec is expected. For yolov3, three specs are expected.
      *  thresh:                 detection threshold
-     *  class_names:            list of class names. Must have the same length as the number of classes the network supports
      *  logger:                 logger object
      *  nms:                    non maxima suppression function
      */
@@ -82,7 +81,6 @@ private:
         int anchors;                            // number of anchor boxes
         int blob_index;                         // network output blob index
         std::vector<float> anchor_priors;
-        std::vector<std::string> class_names;
     };
 
     void process(const std::vector<cv::Size>& image_sizes, int batch);

@@ -21,6 +21,13 @@ namespace jetnet
      *  threshold:  IOU threshold
      */
     void nms(std::vector<Detection>& detections, float thresh);
+
+    /*
+     *  Basic non-maxima suppression based on IOU
+     *  Sorting is done on box score which makes it a bit slower
+     *  threshold:  IOU threshold
+     */
+    void nms_sort(std::vector<Detection>& detections, float thresh);
 }
 
 #endif /* JETNET_NMS_H */

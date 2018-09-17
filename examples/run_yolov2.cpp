@@ -62,7 +62,7 @@ int main(int argc, char** argv)
     auto pre = std::make_shared<Bgr8LetterBoxPreProcessor>(INPUT_BLOB_NAME, logger);
 
     std::vector<YoloPostProcessor::OutputSpec> output_specs = {
-        YoloPostProcessor::OutputSpec { OUTPUT_BLOB_NAME, anchor_priors, class_names }
+        YoloPostProcessor::OutputSpec { OUTPUT_BLOB_NAME, anchor_priors, class_names.size() }
     };
 
     auto post = std::make_shared<YoloPostProcessor>(INPUT_BLOB_NAME,
@@ -70,7 +70,7 @@ int main(int argc, char** argv)
                     output_specs,
                     threshold,
                     logger,
-                    [=](std::vector<Detection>& detections) { nms(detections, nms_threshold); });
+                    [=](std::vector<Detection>& detections) { nms_sort(detections, nms_threshold); });
 
     ModelRunner<Bgr8LetterBoxPreProcessor, YoloPostProcessor> runner(plugin_fact, pre, post, logger, batch_size, enable_profiling);
     std::vector<cv::Mat> images;
@@ -106,7 +106,7 @@ int main(int argc, char** argv)
     // get detections and visualise
     auto detections = post->get_detections();
     cv::Mat out = images[0].clone();
-    draw_detections(detections[0], out);
+    draw_detections(detections[0], class_names, out);
     cv::imshow("result", out);
     cv::waitKey(0);
 

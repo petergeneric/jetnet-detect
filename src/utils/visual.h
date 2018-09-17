@@ -11,7 +11,7 @@ namespace jetnet
      *  detections:     list of detection boxes
      *  image:          the image to draw the detections on
      */
-    void draw_detections(const std::vector<Detection>& detections, cv::Mat& image);
+    void draw_detections(const std::vector<Detection>& detections, std::vector<std::string> class_labels, cv::Mat& image);
 }
 
 #endif /* JETNET_VISUAL_H */

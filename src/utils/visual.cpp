@@ -1,6 +1,6 @@
 #include "visual.h"
 
-void jetnet::draw_detections(const std::vector<Detection>& detections, cv::Mat& image)
+void jetnet::draw_detections(const std::vector<Detection>& detections, std::vector<std::string> class_labels, cv::Mat& image)
 {
     const int font_face = cv::FONT_HERSHEY_SIMPLEX;
     const double font_scale = 0.5;
@@ -34,8 +34,9 @@ void jetnet::draw_detections(const std::vector<Detection>& detections, cv::Mat& 
         cv::Point right_bottom( static_cast<int>(detection.bbox.x + detection.bbox.width),
                                 static_cast<int>(detection.bbox.y + detection.bbox.height));
 
-        cv::Scalar color(colors[detection.class_label_index % number_of_colors]);
-        std::string text(std::to_string(static_cast<int>(detection.probability * 100)) + "% " + detection.class_label);
+        auto class_label_index = std::max_element(detection.probabilities.begin(), detection.probabilities.end()) - detection.probabilities.begin();
+        cv::Scalar color(colors[class_label_index % number_of_colors]);
+        std::string text(std::to_string(static_cast<int>(detection.probabilities[class_label_index] * 100)) + "% " + class_labels[class_label_index]);
 
         int baseline;
         cv::Size text_size = cv::getTextSize(text, font_face, font_scale, text_thickness, &baseline);

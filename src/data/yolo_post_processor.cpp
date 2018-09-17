@@ -30,7 +30,7 @@ bool YoloPostProcessor::OutputSpecInt::init(const OutputSpec& in, const ICudaEng
     h = network_dims.d[1];
     w = network_dims.d[2];
 
-    classes = in.class_names.size();
+    classes = in.num_classes;
     anchors = in.anchor_priors.size() >> 1;
     coords = (c / anchors) - classes - 1;
 
@@ -43,7 +43,6 @@ bool YoloPostProcessor::OutputSpecInt::init(const OutputSpec& in, const ICudaEng
     }
 
     anchor_priors = in.anchor_priors;
-    class_names = in.class_names;
 
     return true;
 }
@@ -193,6 +192,23 @@ void YoloPostProcessor::calc_detections(const float* input, int image_w, int ima
 
                 Detection detection;
 
+                // extract probs for each class label. Probs below the threshold are set to 0
+                bool probs_above_thresh = false;
+                detection.probabilities.resize(net_out.classes);
+                for (cls=0; cls < net_out.classes; ++cls) {
+                    float prob = objectness * input[index + (1 + net_out.coords + cls) * out_channel_step];
+                    if (prob > m_thresh) {
+                        probs_above_thresh = true;
+                    } else {
+                        prob = 0;
+                    }
+                    detection.probabilities[cls] = prob;
+                }
+
+                // stop early if no class prob is higher than the threshold
+                if (!probs_above_thresh)
+                    continue;
+
                 // extract box
                 detection.bbox.x = (x + input[index]) / net_out.w;
                 detection.bbox.y = (y + input[index + out_channel_step]) / net_out.h;
@@ -225,23 +241,7 @@ void YoloPostProcessor::calc_detections(const float* input, int image_w, int ima
                 detection.bbox.width = xmax - xmin;
                 detection.bbox.height = ymax - ymin;
 
-                // extract class label and prob of highest class prob
-                detection.probability = 0;
-                for (cls=0; cls < net_out.classes; ++cls) {
-                    float prob = objectness * input[index + (1 + net_out.coords + cls) * out_channel_step];
-                    if (prob <= m_thresh)
-                        continue;
-
-                    detection.probabilities.push_back(prob);
-                    detection.class_label_indices.push_back(cls);
-
-                    if (prob > detection.probability) {
-                        detection.class_label_index = cls;
-                        detection.class_label = net_out.class_names[cls];
-                        detection.probability = prob;
-                    }
-                }
-
+                // add detection to detection list
                 detections.push_back(detection);
             }
         }

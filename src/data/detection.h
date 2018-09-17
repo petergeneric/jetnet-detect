@@ -10,11 +10,7 @@ namespace jetnet
 struct Detection
 {
     cv::Rect2f bbox;                        // x,y are top left and clipped to original image boundaries
-    int class_label_index;
-    std::string class_label;
-    float probability;                      // most probable one (equals probabilities[class_label_index])
-    std::vector<float> probabilities;       // all probabilities above threshold
-    std::vector<int> class_label_indices;   // corresponding class label indices
+    std::vector<float> probabilities;       // all probabilities for each class
 };
 
 }

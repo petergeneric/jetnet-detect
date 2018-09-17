@@ -34,8 +34,10 @@ static void print_cocos(FILE *fp, std::string image_name, std::vector<Detection>
 
     for (auto detection : detections) {
         for (size_t i=0; i<detection.probabilities.size(); ++i) {
+            if (detection.probabilities[i] == 0)
+                continue;
             fprintf(fp, "{\"image_id\":%d, \"category_id\":%d, \"bbox\":[%f, %f, %f, %f], \"score\":%f},\n", image_id,
-                    coco_ids[detection.class_label_indices[i]], detection.bbox.x, detection.bbox.y, detection.bbox.width,
+                    coco_ids[i], detection.bbox.x, detection.bbox.y, detection.bbox.width,
                     detection.bbox.height, detection.probabilities[i]);
         }
     }
@@ -92,9 +94,9 @@ int main(int argc, char** argv)
     auto pre = std::make_shared<Bgr8LetterBoxPreProcessor>(INPUT_BLOB_NAME, logger);
 
     std::vector<YoloPostProcessor::OutputSpec> output_specs = {
-        YoloPostProcessor::OutputSpec { OUTPUT_BLOB1_NAME, anchor_priors1, class_names },
-        YoloPostProcessor::OutputSpec { OUTPUT_BLOB2_NAME, anchor_priors2, class_names },
-        YoloPostProcessor::OutputSpec { OUTPUT_BLOB3_NAME, anchor_priors3, class_names }
+        YoloPostProcessor::OutputSpec { OUTPUT_BLOB1_NAME, anchor_priors1, class_names.size() },
+        YoloPostProcessor::OutputSpec { OUTPUT_BLOB2_NAME, anchor_priors2, class_names.size() },
+        YoloPostProcessor::OutputSpec { OUTPUT_BLOB3_NAME, anchor_priors3, class_names.size() }
     };
 
     auto post = std::make_shared<YoloPostProcessor>(INPUT_BLOB_NAME,
@@ -102,7 +104,7 @@ int main(int argc, char** argv)
                     output_specs,
                     threshold,
                     logger,
-                    [=](std::vector<Detection>& dets) { nms(dets, nms_threshold); });
+                    [=](std::vector<Detection>& dets) { nms_sort(dets, nms_threshold); });
 
     ModelRunner<Bgr8LetterBoxPreProcessor, YoloPostProcessor> runner(plugin_fact, pre, post, logger, input_batch_size, enable_profiling);
 
