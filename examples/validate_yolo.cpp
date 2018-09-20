@@ -5,16 +5,12 @@
  *  author: Maarten Vandersteegen
  *
  */
-#include "jetnet.h"
 #include <opencv2/opencv.hpp>   // for commandline parser
 #include <thread>
 #include <chrono>
+#include "jetnet.h"
+#include "create_runner.h"
 #include "fast_image_reader.h"
-
-#define INPUT_BLOB_NAME     "data"
-#define OUTPUT_BLOB1_NAME   "probs1"
-#define OUTPUT_BLOB2_NAME   "probs2"
-#define OUTPUT_BLOB3_NAME   "probs3"
 
 using namespace jetnet;
 
@@ -47,6 +43,7 @@ int main(int argc, char** argv)
 {
     std::string keys =
         "{help h usage ? |      | print this message }"
+        "{@type          |<none>| Network type (yolov2, yolov3) }"
         "{@modelfile     |<none>| Built and serialized TensorRT model file }"
         "{@nameslist     |<none>| Class names list file }"
         "{@imagelist     |<none>| File with image paths, one per line }"
@@ -57,13 +54,14 @@ int main(int argc, char** argv)
         "{profile        |      | Enable profiling }";
 
     cv::CommandLineParser parser(argc, argv, keys);
-    parser.about("Jetnet YOLOv3 validator");
+    parser.about("Jetnet YOLO validator");
 
     if (parser.has("help")) {
         parser.printMessage();
         return -1;
     }
 
+    auto network_type = parser.get<std::string>("@type");
     auto input_model_file = parser.get<std::string>("@modelfile");
     auto input_names_file = parser.get<std::string>("@nameslist");
     auto input_image_list = parser.get<std::string>("@imagelist");
@@ -85,32 +83,20 @@ int main(int argc, char** argv)
         return -1;
     }
 
-    std::vector<float> anchor_priors1{116,90, 156,198,373,326};
-    std::vector<float> anchor_priors2{30, 61, 62, 45, 59, 119};
-    std::vector<float> anchor_priors3{10, 13, 16, 30, 33, 23};
+    YoloRunnerFactory runner_fact(class_names.size(), threshold, nms_threshold, input_batch_size, enable_profiling);
+    YoloRunnerFactory::PreType pre;
+    YoloRunnerFactory::RunnerType runner;
+    YoloRunnerFactory::PostType post;
 
-    auto logger = std::make_shared<Logger>(nvinfer1::ILogger::Severity::kINFO);
-    auto plugin_fact = std::make_shared<YoloPluginFactory>(logger);
+    if (network_type == "yolov2")
+        std::tie(pre, runner, post) = runner_fact.create_yolov2();
+    else if (network_type == "yolov3")
+        std::tie(pre, runner, post) = runner_fact.create_yolov3();
+    else {
+        std::cerr << "Unknown network type " << network_type << std::endl;
+    }
 
-    std::vector<unsigned int> channel_map{0, 1, 2};     //read_image read RGB order, network expects RGB order
-    auto pre = std::make_shared<CvLetterBoxPreProcessor>(INPUT_BLOB_NAME, channel_map, logger);
-
-    std::vector<YoloPostProcessor::OutputSpec> output_specs = {
-        YoloPostProcessor::OutputSpec { OUTPUT_BLOB1_NAME, anchor_priors1, class_names.size() },
-        YoloPostProcessor::OutputSpec { OUTPUT_BLOB2_NAME, anchor_priors2, class_names.size() },
-        YoloPostProcessor::OutputSpec { OUTPUT_BLOB3_NAME, anchor_priors3, class_names.size() }
-    };
-
-    auto post = std::make_shared<YoloPostProcessor>(INPUT_BLOB_NAME,
-                    YoloPostProcessor::Type::Yolov3,
-                    output_specs,
-                    threshold,
-                    logger,
-                    [=](std::vector<Detection>& dets) { nms_sort(dets, nms_threshold); });
-
-    ModelRunner<CvLetterBoxPreProcessor, YoloPostProcessor> runner(plugin_fact, pre, post, logger, input_batch_size, enable_profiling);
-
-    if (!runner.init(input_model_file)) {
+    if (!runner->init(input_model_file)) {
         std::cerr << "Failed to init runner" << std::endl;
         return -1;
     }
@@ -153,7 +139,7 @@ int main(int argc, char** argv)
 
         pre->register_images(images);
 
-        if (!runner()) {
+        if (!(*runner)()) {
             std::cerr << "Failed to run network" << std::endl;
             return -1;
         }
@@ -179,7 +165,7 @@ int main(int argc, char** argv)
     fclose(f);
 
     // show profiling if enabled
-    runner.print_profiling();
+    runner->print_profiling();
 
     std::cout << "Processed " << image_paths.size() << " images" << std::endl;
 
