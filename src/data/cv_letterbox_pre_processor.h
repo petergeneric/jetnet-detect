@@ -1,5 +1,5 @@
-#ifndef JETNET_BGR8_LETTERBOX_PRE_PROCESSOR_H
-#define JETNET_BGR8_LETTERBOX_PRE_PROCESSOR_H
+#ifndef JETNET_CV_LETTERBOX_PRE_PROCESSOR_H
+#define JETNET_CV_LETTERBOX_PRE_PROCESSOR_H
 
 #include "logger.h"
 #include "gpu_blob.h"
@@ -12,15 +12,22 @@
 namespace jetnet
 {
 
-class Bgr8LetterBoxPreProcessor
+class CvLetterBoxPreProcessor
 {
 public:
+    
     /*
      *  input_blob_name:    name of the input tensor, needed to know the input dimensions
+     *  channel_map:        Determines the order of how the image channels must be arraged
+     *                      Example: If the channels of the input image have order BGR
+     *                      and the network expects RGB, then channel_map = [2, 1, 0]
+     *                      Example2: If the channels of the input image have order RGBX
+     *                      and the network expects XRGB, then channel_map = [3, 0, 1, 2]
      *  logger:             logger object
      */
-    Bgr8LetterBoxPreProcessor(std::string input_blob_name,
-                              std::shared_ptr<Logger> logger);
+    CvLetterBoxPreProcessor(std::string input_blob_name,
+                            std::vector<unsigned int> channel_map,
+                            std::shared_ptr<Logger> logger);
 
     /*
      *  Called by the model runner after network is deserialized
@@ -33,6 +40,7 @@ public:
      *  Register a set of images to be preprocessed.
      *  images:             input images. The number of images must be smaller
      *                      or equal to the maximum supported batch size of the network
+     *  NOTE:               image channels are expected to have 8-bit depth
      *  The method returns immediately, actual preprocessing happens later
      */
     void register_images(std::vector<cv::Mat> images);
@@ -46,9 +54,10 @@ public:
     bool operator()(std::map<int, GpuBlob>& input_blobs, std::vector<cv::Size>& image_sizes);
 
 private:
-    bool bgr8_to_tensor_data(const cv::Mat& input, float* output);
+    bool cv_to_tensor_data(const cv::Mat& input, float* output);
 
     std::string m_input_blob_name;
+    std::vector<unsigned int> m_channel_map;
     std::shared_ptr<Logger> m_logger;
 
     int m_input_blob_index;
@@ -67,4 +76,4 @@ private:
 
 }
 
-#endif /* JETNET_BGR8_LETTERBOX_PRE_PROCESSOR_H */
+#endif /* JETNET_CV_LETTERBOX_PRE_PROCESSOR_H */

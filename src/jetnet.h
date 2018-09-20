@@ -1,7 +1,7 @@
 #ifndef JETNET_H
 #define JETNET_H
 
-#include "bgr8_letterbox_pre_processor.h"
+#include "cv_letterbox_pre_processor.h"
 #include "detection.h"
 #include "fake_post_processor.h"
 #include "fake_pre_processor.h"

@@ -59,7 +59,9 @@ int main(int argc, char** argv)
 
     auto logger = std::make_shared<Logger>(nvinfer1::ILogger::Severity::kINFO);
     auto plugin_fact = std::make_shared<YoloPluginFactory>(logger);
-    auto pre = std::make_shared<Bgr8LetterBoxPreProcessor>(INPUT_BLOB_NAME, logger);
+
+    std::vector<unsigned int> channel_map{2, 1, 0};     //cv::imread reads BGR order, network expects RGB order
+    auto pre = std::make_shared<CvLetterBoxPreProcessor>(INPUT_BLOB_NAME, channel_map, logger);
 
     std::vector<YoloPostProcessor::OutputSpec> output_specs = {
         YoloPostProcessor::OutputSpec { OUTPUT_BLOB1_NAME, anchor_priors1, class_names.size() },
@@ -74,7 +76,7 @@ int main(int argc, char** argv)
                     logger,
                     [=](std::vector<Detection>& detections) { nms_sort(detections, nms_threshold); });
 
-    ModelRunner<Bgr8LetterBoxPreProcessor, YoloPostProcessor> runner(plugin_fact, pre, post, logger, batch_size, enable_profiling);
+    ModelRunner<CvLetterBoxPreProcessor, YoloPostProcessor> runner(plugin_fact, pre, post, logger, batch_size, enable_profiling);
     std::vector<cv::Mat> images;
 
     cv::Mat img = cv::imread(input_image_file);
