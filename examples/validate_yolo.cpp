@@ -88,12 +88,11 @@ int main(int argc, char** argv)
     YoloRunnerFactory::RunnerType runner;
     YoloRunnerFactory::PostType post;
 
-    if (network_type == "yolov2")
-        std::tie(pre, runner, post) = runner_fact.create_yolov2();
-    else if (network_type == "yolov3")
-        std::tie(pre, runner, post) = runner_fact.create_yolov3();
-    else {
-        std::cerr << "Unknown network type " << network_type << std::endl;
+    std::tie(pre, runner, post) = runner_fact.create(network_type);
+
+    if (!pre || !runner || !post) {
+        std::cerr << "Failed to create runner" << std::endl;
+        return -1;
     }
 
     if (!runner->init(input_model_file)) {

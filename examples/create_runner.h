@@ -27,6 +27,17 @@ public:
     {
     }
 
+    std::tuple<PreType, RunnerType, PostType> create(std::string model_name)
+    {
+        if (model_name == "yolov2")
+            return runner_fact.create_yolov2();
+        else if (model_name == "yolov3")
+            return runner_fact.create_yolov3();
+
+        std::cerr << "Error: unknown model type " << model_name << std::endl;
+        return std::make_tuple(nullptr, nullptr, nullptr);
+    }
+
     std::tuple<PreType, RunnerType, PostType> create_yolov2()
     {
         const std::string input_blob_name = "data";
