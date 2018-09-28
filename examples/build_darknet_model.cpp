@@ -1,14 +1,12 @@
 /*
- *  Yolov2 model builder
+ *  Darknet model builder
  *  copyright EAVISE
  *  author: Maarten Vandersteegen
  *
  */
 #include "jetnet.h"
+#include "create_builder.h"
 #include <opencv2/opencv.hpp>   // for commandline parser
-
-#define INPUT_BLOB_NAME     "data"
-#define OUTPUT_BLOB_NAME    "probs"
 
 using namespace jetnet;
 
@@ -16,6 +14,7 @@ int main(int argc, char** argv)
 {
     std::string keys =
         "{help h usage ? |      | print this message                            }"
+        "{@modelname     |<none>| model name to build                           }"
         "{@weightsfile   |<none>| darknet weights file                          }"
         "{@planfile      |<none>| serializes GIE output file                    }"
         "{fp16           |      | optimize for FP16 precision (FP32 by default) }"
@@ -24,13 +23,14 @@ int main(int argc, char** argv)
         "{mb maxbatch    | 1    | maximum batch size the network must handle    }";
 
     cv::CommandLineParser parser(argc, argv, keys);
-    parser.about("Jetnet YOLOv2 builder");
+    parser.about("Jetnet darknet model builder");
 
     if (parser.has("help")) {
         parser.printMessage();
         return -1;
     }
 
+    auto model_name = parser.get<std::string>("@modelname");
     auto weights_file = parser.get<std::string>("@weightsfile");
     auto output_file = parser.get<std::string>("@planfile");
     auto float_16_opt = parser.has("fp16");
@@ -43,9 +43,16 @@ int main(int argc, char** argv)
         return 0;
     }
 
-    Yolov2Builder builder(INPUT_BLOB_NAME, OUTPUT_BLOB_NAME, weights_file, nvinfer1::DimsCHW{3, input_height, input_width}, 5, 80);
+    DarknetBuilderFactory builder_fact;
 
-    if (!builder.init(std::make_shared<Logger>(nvinfer1::ILogger::Severity::kINFO))) {
+    auto builder = builder_fact.create(model_name, weights_file);
+
+    if (!builder) {
+        std::cerr << "Failed to create model builder" << std::endl;
+        return -1;
+    }
+
+    if (!builder->init(std::make_shared<Logger>(nvinfer1::ILogger::Severity::kINFO))) {
         std::cerr << "Failed to initialize model builder" << std::endl;
         return -1;
     }
@@ -53,7 +60,7 @@ int main(int argc, char** argv)
     nvinfer1::DataType weights_datatype = nvinfer1::DataType::kFLOAT;
 
     if (float_16_opt) {
-        if (!builder.platform_supports_fp16()) {
+        if (!builder->platform_supports_fp16()) {
             std::cerr << "Platform does not support FP16" << std::endl;
             return -1;
         }
@@ -61,23 +68,23 @@ int main(int argc, char** argv)
         weights_datatype = nvinfer1::DataType::kHALF;
 
         // in case batch > 1, this will improve speed
-        builder.platform_set_paired_image_mode();
+        builder->platform_set_paired_image_mode();
     }
 
     std::cout << "Parsing the network..." << std::endl;
-    if (builder.parse(weights_datatype) == nullptr) {
+    if (builder->parse(weights_datatype) == nullptr) {
         std::cerr << "Failed to parse network" << std::endl;
         return -1;
     }
 
     std::cout << "Building the network..." << std::endl;
-    if (builder.build(max_batch_size) == nullptr) {
+    if (builder->build(max_batch_size) == nullptr) {
         std::cerr << "Failed to build network" << std::endl;
         return -1;
     }
 
     std::cout << "Serializing to file..." << std::endl;
-    if (builder.serialize(output_file) == nullptr) {
+    if (builder->serialize(output_file) == nullptr) {
         std::cerr << "Failed to serialize network" << std::endl;
         return -1;
     }
