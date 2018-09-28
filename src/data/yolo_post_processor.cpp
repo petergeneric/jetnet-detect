@@ -62,16 +62,9 @@ bool YoloPostProcessor::init(const ICudaEngine* engine)
                                     (void)in_size;
                                     return (exp(x) * prior) / out_size;
                                 };
-
-            if (m_output_specs.size() != 1) {
-                m_logger->log(ILogger::Severity::kERROR, "Running YOLOv2, expecting only one output spec, got " +
-                              std::to_string(m_output_specs.size()));
-                return false;
-            }
-
             break;
         case Type::Yolov3:
-            // for yolov3, also the width/height output maps are sigmoid applied. To get the final
+            // for yolov3 (tiny), also the width/height output maps are sigmoid applied. To get the final
             // width/height values we need exp(x) where x is the output of the last conv layer (without sigmoid)
             // we can prove that exp(x) = s(x) / (1 - s(x)) where s is the sigmoid operator
             m_calc_box_size = [](float x, float prior, float in_size, float out_size)
@@ -79,13 +72,6 @@ bool YoloPostProcessor::init(const ICudaEngine* engine)
                                     (void)out_size;
                                     return (prior * x) / ((1.0 - x) * in_size);
                                 };
-
-            if (m_output_specs.size() != 3) {
-                m_logger->log(ILogger::Severity::kERROR, "Running YOLOv3, expecting three output specs, got " +
-                              std::to_string(m_output_specs.size()));
-                return false;
-            }
-
             break;
         default:
             m_logger->log(ILogger::Severity::kERROR, "Unknown network type");

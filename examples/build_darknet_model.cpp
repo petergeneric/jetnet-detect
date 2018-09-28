@@ -43,7 +43,7 @@ int main(int argc, char** argv)
         return 0;
     }
 
-    DarknetBuilderFactory builder_fact;
+    DarknetBuilderFactory builder_fact(input_width, input_height);
 
     auto builder = builder_fact.create(model_name, weights_file);
 

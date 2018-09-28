@@ -30,9 +30,11 @@ public:
     std::tuple<PreType, RunnerType, PostType> create(std::string model_name)
     {
         if (model_name == "yolov2")
-            return runner_fact.create_yolov2();
+            return create_yolov2();
         else if (model_name == "yolov3")
-            return runner_fact.create_yolov3();
+            return create_yolov3();
+        else if (model_name == "yolov3-tiny")
+            return create_yolov3_tiny();
 
         std::cerr << "Error: unknown model type " << model_name << std::endl;
         return std::make_tuple(nullptr, nullptr, nullptr);
@@ -92,6 +94,38 @@ public:
             jetnet::YoloPostProcessor::OutputSpec { output_blob1_name, anchor_priors1, m_num_classes },
             jetnet::YoloPostProcessor::OutputSpec { output_blob2_name, anchor_priors2, m_num_classes },
             jetnet::YoloPostProcessor::OutputSpec { output_blob3_name, anchor_priors3, m_num_classes }
+        };
+
+        auto post = std::make_shared<jetnet::YoloPostProcessor>(input_blob_name,
+                        jetnet::YoloPostProcessor::Type::Yolov3,
+                        output_specs,
+                        m_threshold,
+                        logger,
+                        [=](std::vector<jetnet::Detection>& detections) { jetnet::nms_sort(detections, m_nms_threshold); });
+
+        auto runner = std::make_shared<jetnet::ModelRunner<jetnet::CvLetterBoxPreProcessor, jetnet::YoloPostProcessor>>(plugin_fact, pre, post, logger, m_batch_size, m_enable_profiling);
+
+        return std::make_tuple(pre, runner, post);
+    }
+
+    std::tuple<PreType, RunnerType, PostType> create_yolov3_tiny()
+    {
+        const std::string input_blob_name = "data";
+        const std::string output_blob1_name = "probs1";
+        const std::string output_blob2_name = "probs2";
+
+        const std::vector<float> anchor_priors1{81, 82, 135,169,344,319};
+        const std::vector<float> anchor_priors2{10, 14, 23, 27, 37, 58};
+
+        auto logger = std::make_shared<jetnet::Logger>(nvinfer1::ILogger::Severity::kINFO);
+        auto plugin_fact = std::make_shared<jetnet::YoloPluginFactory>(logger);
+
+        std::vector<unsigned int> channel_map{0, 1, 2};     //read_image read RGB order, network expects RGB order
+        auto pre = std::make_shared<jetnet::CvLetterBoxPreProcessor>(input_blob_name, channel_map, logger);
+
+        std::vector<jetnet::YoloPostProcessor::OutputSpec> output_specs = {
+            jetnet::YoloPostProcessor::OutputSpec { output_blob1_name, anchor_priors1, m_num_classes },
+            jetnet::YoloPostProcessor::OutputSpec { output_blob2_name, anchor_priors2, m_num_classes },
         };
 
         auto post = std::make_shared<jetnet::YoloPostProcessor>(input_blob_name,
