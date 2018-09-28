@@ -13,6 +13,7 @@
 #include "darknet_weights_loader.h"
 #include "yolov2_builder.h"
 #include "yolov3_builder.h"
+#include "yolov3_tiny_builder.h"
 #include "leaky_relu.h"
 #include "leaky_relu_native.h"
 #include "leaky_relu_plugin.h"

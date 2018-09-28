@@ -1,6 +1,7 @@
-#include "yolov3_builder.h"
+#include "yolov3_tiny_builder.h"
 #include "custom_assert.h"
 #include "logger.h"
+#include <limits>
 
 using namespace jetnet;
 using namespace nvinfer1;
@@ -81,7 +82,47 @@ INetworkDefinition* Yolov3TinyBuilder::parse(DataType dt)
     ILayer* conv5 = m_convs[5]("conv5", m_network, *m_weights, *pool4->getOutput(0), 512, DimsHW{3, 3});
     ASSERT(conv5);  // 10
 
-    IPoolingLayer* pool5 = m_network->addPooling(*conv5->getOutput(0), PoolingType::kMAX, DimsHW{2, 2});
+    // add asymmetric -MAX_FLOAT padding (right and bottom) so the reduction in spacial resolution caused by the
+    // following max pooling layer with window 2 and stride 1 is compensated for
+    // we do this by adding a constant tensor (with -MAX_FLOAT values on the pad regions and zeros elsewhere) with
+    // our assymetric zero padded input tensor
+
+    // pad right bottom
+    IPaddingLayer* pad = m_network->addPadding(*conv5->getOutput(0), DimsHW{0, 0}, DimsHW{1, 1});
+    ASSERT(pad);
+
+    Weights const_weights;
+
+    // calculate constant vector
+    {
+        // allocate 3D vector filled with zeros
+        Dims dims = pad->getOutput(0)->getDimensions();
+        ASSERT(dims.nbDims == 3);
+        const int channels = dims.d[0], height = dims.d[1], width = dims.d[2];
+        auto elements = std::vector<float>(channels * height * width, 0);
+
+        // fill padding area of vector (top row and most left column) with -MAX_FLOAT
+        for (int c=0; c<channels; ++c) {
+            for (int h=0; h<height; ++h) {
+                for (int w=0; w<width; ++w) {
+                    if (h == (height - 1) || w == (width - 1))
+                        elements[c * height * width + h * width + w] = -std::numeric_limits<float>::max();
+                }
+            }
+        }
+
+        // convert vector to tensor
+        const_weights = m_weights->get(elements);
+    }
+
+    IConstantLayer* constant = m_network->addConstant(pad->getOutput(0)->getDimensions(), const_weights);
+    ASSERT(constant);
+
+    IElementWiseLayer* add = m_network->addElementWise(*constant->getOutput(0), *pad->getOutput(0), ElementWiseOperation::kSUM);
+    ASSERT(add);
+
+    // max pooling that does not reduce resolution
+    IPoolingLayer* pool5 = m_network->addPooling(*add->getOutput(0), PoolingType::kMAX, DimsHW{2, 2});
     ASSERT(pool5);  // 11
     pool5->setStride(DimsHW{1, 1});
     pool5->setName("pool5");
@@ -107,7 +148,7 @@ INetworkDefinition* Yolov3TinyBuilder::parse(DataType dt)
     conv11->setName("conv11");
 
     // first 'yolo' layer
-    ILayer* yolo0 = m_network->addActivation(*conv9->getOutput(0), ActivationType::kSIGMOID);
+    ILayer* yolo0 = m_network->addActivation(*conv11->getOutput(0), ActivationType::kSIGMOID);
     ASSERT(yolo0);  // 16
     yolo0->setName("yolo0");
 
@@ -126,7 +167,7 @@ INetworkDefinition* Yolov3TinyBuilder::parse(DataType dt)
     ASSERT(upsample);  // 19
     upsample->setName("upsample");
 
-    ITensor* concat_tensors[] = {upsample->getOutput(0), conv6->getOutput(0)};
+    ITensor* concat_tensors[] = {upsample->getOutput(0), conv4->getOutput(0)};
     ILayer* concat = m_network->addConcatenation(concat_tensors, 2);
     ASSERT(concat); // 20
     concat->setName("concat");

@@ -11,7 +11,7 @@ class DarknetBuilderFactory
 
 public:
 
-    DarknetBuilderFactory(int input_width, int input_height)
+    DarknetBuilderFactory(int input_width, int input_height) :
         m_input_width(input_width),
         m_input_height(input_height)
     {
@@ -24,9 +24,9 @@ public:
         else if (model_name == "yolov3")
             return create_yolov3(weights_file);
         else if (model_name == "yolov3-tiny")
-            return create_yolov3_tiny(weights_file)
+            return create_yolov3_tiny(weights_file);
 
-        std::cerr << "Error: unknown model type " << model_name << std::end;
+        std::cerr << "Error: unknown model type " << model_name << std::endl;
         return nullptr;
     }
 
@@ -35,8 +35,8 @@ public:
         const std::string input_blob_name = "data";
         const std::string output_blob_name = "probs";
 
-        return std::make_shared<Yolov2Builder>(input_blob_name, output_blob_name, weights_file,
-                                               nvinfer1::DimsCHW{3, m_input_height, m_input_width}, 5, 80);
+        return std::make_shared<jetnet::Yolov2Builder>(input_blob_name, output_blob_name, weights_file,
+                                                nvinfer1::DimsCHW{3, m_input_height, m_input_width}, 5, 80);
     }
 
     std::shared_ptr<jetnet::ModelBuilder> create_yolov3(std::string weights_file)
@@ -49,12 +49,12 @@ public:
         const int num_anchors = 3;
         const int num_classes = 80;
         const int num_coords = 4;
-        Yolov3Builder::OutputSpec outspec_large{output_blob1_name,  num_anchors, num_classes, num_coords};
-        Yolov3Builder::OutputSpec outspec_mid{output_blob2_name,    num_anchors, num_classes, num_coords};
-        Yolov3Builder::OutputSpec outspec_small{output_blob3_name,  num_anchors, num_classes, num_coords};
+        jetnet::Yolov3Builder::OutputSpec outspec_large{output_blob1_name,  num_anchors, num_classes, num_coords};
+        jetnet::Yolov3Builder::OutputSpec outspec_mid{output_blob2_name,    num_anchors, num_classes, num_coords};
+        jetnet::Yolov3Builder::OutputSpec outspec_small{output_blob3_name,  num_anchors, num_classes, num_coords};
 
-        return std::make_shared<Yolov3Builder>(input_blob_name, weights_file, nvinfer1::DimsCHW{3, m_input_height, m_input_width},
-                                               outspec_large, outspec_mid, outspec_small);
+        return std::make_shared<jetnet::Yolov3Builder>(input_blob_name, weights_file, nvinfer1::DimsCHW{3,
+                                                m_input_height, m_input_width}, outspec_large, outspec_mid, outspec_small);
     }
 
     std::shared_ptr<jetnet::ModelBuilder> create_yolov3_tiny(std::string weights_file)
@@ -66,11 +66,11 @@ public:
         const int num_anchors = 3;
         const int num_classes = 80;
         const int num_coords = 4;
-        Yolov3TinyBuilder::OutputSpec outspec_large{output_blob1_name,  num_anchors, num_classes, num_coords};
-        Yolov3TinyBuilder::OutputSpec outspec_small{output_blob2_name,  num_anchors, num_classes, num_coords};
+        jetnet::Yolov3TinyBuilder::OutputSpec outspec_large{output_blob1_name,  num_anchors, num_classes, num_coords};
+        jetnet::Yolov3TinyBuilder::OutputSpec outspec_small{output_blob2_name,  num_anchors, num_classes, num_coords};
 
-        return std::make_shared<Yolov3TinyBuilder>(input_blob_name, weights_file, nvinfer1::DimsCHW{3, m_input_height, m_input_width},
-                                                   outspec_large, outspec_small);
+        return std::make_shared<jetnet::Yolov3TinyBuilder>(input_blob_name, weights_file, nvinfer1::DimsCHW{3,
+                                                m_input_height, m_input_width}, outspec_large, outspec_small);
     }
 };
 
