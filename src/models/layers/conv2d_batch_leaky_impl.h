@@ -1,15 +1,23 @@
-#include "conv2d_batch_leaky.h"
-
-using namespace jetnet;
-using namespace nvinfer1;
+#ifndef JETNET_CONV2D_BATCH_LEAKY_IMPL_H
+#define JETNET_CONV2D_BATCH_LEAKY_IMPL_H
 
 #define EPSILON             0.00001L
 
-ILayer* Conv2dBatchLeaky::operator()(std::string name, INetworkDefinition* network, DarknetWeightsLoader& weights, ITensor& input,
-                int nbOutputMaps, DimsHW kernelSize, DimsHW padding, DimsHW stride, float negSlope, std::unique_ptr<ILeakyRelu> act_impl)
+namespace jetnet
+{
+
+template<typename TLeaky>
+nvinfer1::ILayer* Conv2dBatchLeaky::operator()(std::string name,
+                                               nvinfer1::INetworkDefinition* network,
+                                               DarknetWeightsLoader& weights,
+                                               nvinfer1::ITensor& input,
+                                               int nbOutputMaps,
+                                               nvinver1::DimsHW kernelSize,
+                                               nvinver1::DimsHW padding,
+                                               nvinver1::DimsHW stride, float negSlope)
 {
     Dims input_dim = input.getDimensions();
-    const Weights default_weights{weights.datatype, nullptr, 0};
+    const nvinfer1::Weights default_weights{weights.datatype, nullptr, 0};
     const int num_channels = input_dim.d[0];
     m_activation = std::move(act_impl);
 
@@ -43,14 +51,14 @@ ILayer* Conv2dBatchLeaky::operator()(std::string name, INetworkDefinition* netwo
         scale_vals[i] = scale_val;
     }
 
-    const Weights bn_scales = weights.get(scale_vals);
-    const Weights bn_shifts = weights.get(shift_vals);
+    const nvinfer1::Weights bn_scales = weights.get(scale_vals);
+    const nvinfer1::Weights bn_shifts = weights.get(shift_vals);
 
     // Read weights for conv layer
-    const Weights conv_weights = weights.get(nbOutputMaps * num_channels * kernelSize.h() * kernelSize.w());
+    const nvinfer1::Weights conv_weights = weights.get(nbOutputMaps * num_channels * kernelSize.h() * kernelSize.w());
 
     // conv layer without bias (bias is within batchnorm)
-    IConvolutionLayer* conv = network->addConvolution(input, nbOutputMaps, kernelSize, conv_weights, default_weights);
+    nvinver1::IConvolutionLayer* conv = network->addConvolution(input, nbOutputMaps, kernelSize, conv_weights, default_weights);
     if (!conv)
         return nullptr;
 
@@ -59,12 +67,16 @@ ILayer* Conv2dBatchLeaky::operator()(std::string name, INetworkDefinition* netwo
     conv->setName(std::string(name + "_conv").c_str());
 
     // batch norm layer
-    ILayer* batchnorm = network->addScale(*conv->getOutput(0), ScaleMode::kCHANNEL, bn_shifts, bn_scales, default_weights);
+    nvinver1::ILayer* batchnorm = network->addScale(*conv->getOutput(0), ScaleMode::kCHANNEL, bn_shifts, bn_scales, default_weights);
     if (!batchnorm)
         return nullptr;
 
     batchnorm->setName(std::string(name + "_bn").c_str());
 
     // activation layer
-    return (*m_activation)(name, network, *batchnorm->getOutput(0), negSlope, weights.datatype);
+    return m_activation(name, network, *batchnorm->getOutput(0), negSlope, weights.datatype);
 }
+
+}
+
+#endif /* JETNET_CONV2D_BATCH_LEAKY_IMPL_H */

@@ -1,14 +1,14 @@
 #ifndef JETNET_LEAKY_RELU_PLUGIN_H
 #define JETNET_LEAKY_RELU_PLUGIN_H
 
-#include "leaky_relu.h"
+#include <NvInfer.h>
 #include <NvInferPlugin.h>
 #include <memory>
 
 namespace jetnet
 {
 
-class LeakyReluPlugin : public ILeakyRelu
+class LeakyReluPlugin
 {
 public:
     nvinfer1::ILayer* operator()(std::string name, nvinfer1::INetworkDefinition* network, nvinfer1::ITensor& input,

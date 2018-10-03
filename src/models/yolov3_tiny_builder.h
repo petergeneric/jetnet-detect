@@ -4,6 +4,7 @@
 #include "model_builder.h"
 #include "darknet_weights_loader.h"
 #include "conv2d_batch_leaky.h"
+#include "leaky_relu_plugin.h"
 #include "upsample_plugin.h"
 #include "fp16.h"
 #include <NvInfer.h>
@@ -56,7 +57,7 @@ private:
      */
     std::unique_ptr<DarknetWeightsLoader> m_weights;
     std::unique_ptr<UpsamplePlugin> m_upsample_plugin;
-    Conv2dBatchLeaky m_convs[11];
+    Conv2dBatchLeaky m_convs<LeakyReluPlugin>[11];
 
 };
 

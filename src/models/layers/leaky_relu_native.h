@@ -1,13 +1,13 @@
 #ifndef JETNET_LEAKY_RELU_NATIVE_H
 #define JETNET_LEAKY_RELU_NATIVE_H
 
-#include "leaky_relu.h"
+#include <NvInfer.h>
 #include "fp16.h"
 
 namespace jetnet
 {
 
-class LeakyReluNative : public ILeakyRelu
+class LeakyReluNative
 {
     /*
      * Building PReLU using native TensorRT layers. Leaky ReLU can be calulated by:
