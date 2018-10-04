@@ -61,7 +61,7 @@ private:
     std::unique_ptr<DarknetWeightsLoader> m_weights;
     std::unique_ptr<UpsamplePlugin> m_upsample_plugin0;
     std::unique_ptr<UpsamplePlugin> m_upsample_plugin1;
-    Conv2dBatchLeaky m_convs<LeakyReluPlugin>[72];
+    Conv2dBatchLeaky<LeakyReluPlugin> m_convs[72];
 
 };
 

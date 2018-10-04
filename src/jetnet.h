@@ -14,7 +14,6 @@
 #include "yolov2_builder.h"
 #include "yolov3_builder.h"
 #include "yolov3_tiny_builder.h"
-#include "leaky_relu.h"
 #include "leaky_relu_native.h"
 #include "leaky_relu_plugin.h"
 #include "conv2d_batch_leaky.h"

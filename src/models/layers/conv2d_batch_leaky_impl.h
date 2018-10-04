@@ -7,19 +7,18 @@ namespace jetnet
 {
 
 template<typename TLeaky>
-nvinfer1::ILayer* Conv2dBatchLeaky::operator()(std::string name,
+nvinfer1::ILayer* Conv2dBatchLeaky<TLeaky>::operator()(std::string name,
                                                nvinfer1::INetworkDefinition* network,
                                                DarknetWeightsLoader& weights,
                                                nvinfer1::ITensor& input,
                                                int nbOutputMaps,
-                                               nvinver1::DimsHW kernelSize,
-                                               nvinver1::DimsHW padding,
-                                               nvinver1::DimsHW stride, float negSlope)
+                                               nvinfer1::DimsHW kernelSize,
+                                               nvinfer1::DimsHW padding,
+                                               nvinfer1::DimsHW stride, float negSlope)
 {
-    Dims input_dim = input.getDimensions();
+    nvinfer1::Dims input_dim = input.getDimensions();
     const nvinfer1::Weights default_weights{weights.datatype, nullptr, 0};
     const int num_channels = input_dim.d[0];
-    m_activation = std::move(act_impl);
 
     // Read weights for batchnorm layer (biases are applied in batchnorm i.s.o. conv layer)
     std::vector<float> biases = weights.get_floats(nbOutputMaps);
@@ -58,7 +57,7 @@ nvinfer1::ILayer* Conv2dBatchLeaky::operator()(std::string name,
     const nvinfer1::Weights conv_weights = weights.get(nbOutputMaps * num_channels * kernelSize.h() * kernelSize.w());
 
     // conv layer without bias (bias is within batchnorm)
-    nvinver1::IConvolutionLayer* conv = network->addConvolution(input, nbOutputMaps, kernelSize, conv_weights, default_weights);
+    nvinfer1::IConvolutionLayer* conv = network->addConvolution(input, nbOutputMaps, kernelSize, conv_weights, default_weights);
     if (!conv)
         return nullptr;
 
@@ -67,7 +66,7 @@ nvinfer1::ILayer* Conv2dBatchLeaky::operator()(std::string name,
     conv->setName(std::string(name + "_conv").c_str());
 
     // batch norm layer
-    nvinver1::ILayer* batchnorm = network->addScale(*conv->getOutput(0), ScaleMode::kCHANNEL, bn_shifts, bn_scales, default_weights);
+    nvinfer1::ILayer* batchnorm = network->addScale(*conv->getOutput(0), nvinfer1::ScaleMode::kCHANNEL, bn_shifts, bn_scales, default_weights);
     if (!batchnorm)
         return nullptr;
 

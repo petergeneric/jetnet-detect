@@ -61,7 +61,7 @@ private:
      *  layer states (weights, layers and plugins)
      */
     std::unique_ptr<DarknetWeightsLoader> m_weights;
-    Conv2dBatchLeaky m_convs<LeakyReluPlugin>[22];
+    Conv2dBatchLeaky<LeakyReluPlugin> m_convs[22];
 
     void (*nvPluginDeleter)(nvinfer1::plugin::INvPlugin*){[](nvinfer1::plugin::INvPlugin* ptr) { ptr->destroy(); }};
     std::unique_ptr<nvinfer1::plugin::INvPlugin, decltype(nvPluginDeleter)> m_reorg_plugin{nullptr, nvPluginDeleter};

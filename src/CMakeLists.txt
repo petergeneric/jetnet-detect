@@ -13,7 +13,6 @@ set (HEADERS
     models/yolov2_builder.h
     models/yolov3_builder.h
     models/yolov3_tiny_builder.h
-    models/layers/leaky_relu.h
     models/layers/leaky_relu_native.h
     models/layers/leaky_relu_plugin.h
     models/layers/conv2d_batch_leaky.h
@@ -41,7 +40,6 @@ set (SOURCES
     models/yolov3_tiny_builder.cpp
     models/layers/leaky_relu_native.cpp
     models/layers/leaky_relu_plugin.cpp
-    models/layers/conv2d_batch_leaky.cpp
     models/plugins/upsample_plugin.cpp
     models/plugins/blas_cuda.cu
     models/plugins/yolo_plugin_factory.cpp

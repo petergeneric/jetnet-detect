@@ -2,6 +2,7 @@
 #define JETNET_LEAKY_RELU_NATIVE_H
 
 #include <NvInfer.h>
+#include <string>
 #include "fp16.h"
 
 namespace jetnet
