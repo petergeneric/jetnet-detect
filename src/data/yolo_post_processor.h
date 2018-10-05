@@ -36,13 +36,15 @@ public:
      *  thresh:                 detection threshold
      *  logger:                 logger object
      *  nms:                    non maxima suppression function
+     *  relative_coords:        Return detections using relative coordinates (between 0.0 and 1.0 for x, y, width and height)
      */
     YoloPostProcessor(std::string input_blob_name,
                         Type network_type,
                         std::vector<OutputSpec> output_specs,
                         float thresh,
                         std::shared_ptr<Logger> logger,
-                        NmsFunction nms);
+                        NmsFunction nms,
+                        bool relative_coords=false);
 
     /*
      *  Called after the network is deserialized
@@ -93,6 +95,7 @@ private:
     float m_thresh;
     std::shared_ptr<Logger> m_logger;
     NmsFunction m_nms;
+    bool m_relative_coords;
 
     int m_net_in_w;
     int m_net_in_h;

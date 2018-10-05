@@ -10,13 +10,15 @@ YoloPostProcessor::YoloPostProcessor(std::string input_blob_name,
                         std::vector<OutputSpec> output_specs,
                         float thresh,
                         std::shared_ptr<Logger> logger,
-                        NmsFunction nms) :
+                        NmsFunction nms,
+                        bool relative_coords) :
     m_input_blob_name(input_blob_name),
     m_network_type(network_type),
     m_output_specs(output_specs),
     m_thresh(thresh),
     m_logger(logger),
-    m_nms(nms)
+    m_nms(nms),
+    m_relative_coords(relative_coords)
 {
 }
 
@@ -152,6 +154,8 @@ void YoloPostProcessor::calc_detections(const float* input, int image_w, int ima
     int new_w=0;
     int new_h=0;
     const int out_channel_step = net_out.w * net_out.h;
+    float scale_w = image_w;
+    float scale_h = image_h;
 
     // calculate image width/height that the image must have to fit the network while keeping the aspect ratio fixed
     if ((m_net_in_w * image_h) < (m_net_in_h * image_w)) {
@@ -161,6 +165,9 @@ void YoloPostProcessor::calc_detections(const float* input, int image_w, int ima
         new_h = m_net_in_h;
         new_w = (image_w * m_net_in_h)/image_h;
     }
+
+    if (m_relative_coords)
+        scale_w = scale_h = 1.0;
 
     for (anchor=0; anchor<net_out.anchors; ++anchor) {
         const int anchor_index = anchor * out_channel_step * (1 + net_out.coords + net_out.classes);
@@ -196,31 +203,32 @@ void YoloPostProcessor::calc_detections(const float* input, int image_w, int ima
                     continue;
 
                 // extract box
-                detection.bbox.x = (x + input[index]) / net_out.w;
-                detection.bbox.y = (y + input[index + out_channel_step]) / net_out.h;
-                detection.bbox.width = m_calc_box_size(input[index + 2 * out_channel_step],
-                                                       net_out.anchor_priors[2 * anchor],
-                                                       m_net_in_w, net_out.w);
-                detection.bbox.height = m_calc_box_size(input[index + 3 * out_channel_step],
-                                                       net_out.anchor_priors[2 * anchor + 1],
-                                                       m_net_in_h, net_out.h);
+                cv::Rect2f bbox;
+                bbox.x = (x + input[index]) / net_out.w;
+                bbox.y = (y + input[index + out_channel_step]) / net_out.h;
+                bbox.width = m_calc_box_size(input[index + 2 * out_channel_step],
+                                             net_out.anchor_priors[2 * anchor],
+                                             m_net_in_w, net_out.w);
+                bbox.height = m_calc_box_size(input[index + 3 * out_channel_step],
+                                              net_out.anchor_priors[2 * anchor + 1],
+                                              m_net_in_h, net_out.h);
 
                 // transform bbox network coords to input image coordinates
-                detection.bbox.x = ((detection.bbox.x * m_net_in_w - (m_net_in_w - new_w) / 2.0) * image_w) / new_w;
-                detection.bbox.y = ((detection.bbox.y * m_net_in_h - (m_net_in_h - new_h) / 2.0) * image_h) / new_h;
-                detection.bbox.width  *= (m_net_in_w * image_w) / new_w;
-                detection.bbox.height *= (m_net_in_h * image_h) / new_h;
+                bbox.x = ((bbox.x * m_net_in_w - (m_net_in_w - new_w) / 2.0) * scale_w) / new_w;
+                bbox.y = ((bbox.y * m_net_in_h - (m_net_in_h - new_h) / 2.0) * scale_h) / new_h;
+                bbox.width  *= (m_net_in_w * scale_w) / new_w;
+                bbox.height *= (m_net_in_h * scale_h) / new_h;
 
                 // clip bboxes to image boundaries and convert x,y to top left corner
-                float xmin = detection.bbox.x - detection.bbox.width/2.;
-                float xmax = detection.bbox.x + detection.bbox.width/2.;
-                float ymin = detection.bbox.y - detection.bbox.height/2.;
-                float ymax = detection.bbox.y + detection.bbox.height/2.;
+                float xmin = bbox.x - bbox.width/2.;
+                float xmax = bbox.x + bbox.width/2.;
+                float ymin = bbox.y - bbox.height/2.;
+                float ymax = bbox.y + bbox.height/2.;
 
                 if (xmin < 0) xmin = 0;
                 if (ymin < 0) ymin = 0;
-                if (xmax > image_w) xmax = image_w;
-                if (ymax > image_h) ymax = image_h;
+                if (xmax > scale_w) xmax = scale_w;
+                if (ymax > scale_h) ymax = scale_h;
 
                 detection.bbox.x = xmin;
                 detection.bbox.y = ymin;
