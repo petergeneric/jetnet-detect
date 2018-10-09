@@ -1,8 +1,8 @@
-include_directories (${jetnet_INCLUDES})
+include_directories (${TARGET_INCLUDE_DIRS})
 
 link_libraries (
     jetnet_static
-    ${jetnet_LIBS}
+    ${TARGET_LIBS}
 )
 
 add_executable (jetnet_build_darknet_model build_darknet_model.cpp)
