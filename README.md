@@ -1,7 +1,7 @@
 # Jetnet
 <img src="jetnet_logo.png" alt="Logo" width="250">
 
-Super fast TensorRT implementation of YOLOv2 and YOLOv3
+Super fast TensorRT implementation of YOLOv2, YOLOv3 and YOLOv3-tiny
 
 | YOLOv2               | FP32 mode    | FP16 mode |
 |:---------------------|:-------------|:----------|
@@ -47,6 +47,12 @@ Installing on your system (path set with -DCMAKE_INSTALL_PREFIX):
 
 ```
 make install
+```
+
+You can compile other cmake based projects against jetnet using:
+
+```
+find_package(jetnet REQUIRED)
 ```
 
 ## Compiling a network
