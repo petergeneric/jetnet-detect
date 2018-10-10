@@ -8,6 +8,7 @@ set (HEADERS
     data/yolo_post_processor.h
     engine/model_builder.h
     engine/model_runner.h
+    engine/model_runner_impl.h
     engine/gpu_blob.h
     models/darknet_weights_loader.h
     models/yolov2_builder.h
@@ -16,6 +17,7 @@ set (HEADERS
     models/layers/leaky_relu_native.h
     models/layers/leaky_relu_plugin.h
     models/layers/conv2d_batch_leaky.h
+    models/layers/conv2d_batch_leaky_impl.h
     models/plugins/blas_cuda.h
     models/plugins/upsample_plugin.h
     models/plugins/yolo_plugin_factory.h

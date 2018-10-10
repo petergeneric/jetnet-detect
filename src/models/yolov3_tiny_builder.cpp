@@ -11,6 +11,19 @@ using namespace nvinfer1;
 template class Yolov3TinyBuilder<LeakyReluPlugin>;
 template class Yolov3TinyBuilder<LeakyReluNative>;
 
+#if (NV_TENSORRT_MAJOR <= 3)
+
+template<typename TActivation>
+INetworkDefinition* Yolov3TinyBuilder<TActivation>::parse(DataType dt)
+{
+    (void)dt;
+
+    m_logger->log(ILogger::Severity::kERROR, "Yolov3 tiny is not supported with TensorRT 3.X and earlier");    
+    return nullptr;
+}
+
+#else
+
 template<typename TActivation>
 INetworkDefinition* Yolov3TinyBuilder<TActivation>::parse(DataType dt)
 {
@@ -190,3 +203,5 @@ INetworkDefinition* Yolov3TinyBuilder<TActivation>::parse(DataType dt)
 
     return m_network;
 }
+
+#endif
