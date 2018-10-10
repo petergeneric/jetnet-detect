@@ -5,6 +5,7 @@
 #include "darknet_weights_loader.h"
 #include "conv2d_batch_leaky.h"
 #include "fp16.h"
+#include <NvInferPlugin.h>
 #include <NvInfer.h>
 #include <memory>
 #include <string>
