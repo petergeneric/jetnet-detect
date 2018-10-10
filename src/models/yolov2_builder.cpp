@@ -1,11 +1,17 @@
 #include "yolov2_builder.h"
 #include "custom_assert.h"
+#include "leaky_relu_plugin.h"
+#include "leaky_relu_native.h"
 #include "logger.h"
 
 using namespace jetnet;
 using namespace nvinfer1;
 
-INetworkDefinition* Yolov2Builder::parse(DataType dt)
+template class Yolov2Builder<LeakyReluPlugin>;
+template class Yolov2Builder<LeakyReluNative>;
+
+template<typename TActivation>
+INetworkDefinition* Yolov2Builder<TActivation>::parse(DataType dt)
 {
     m_logger->log(ILogger::Severity::kINFO, "Opening weights file '" + m_weightsfile + "'");
     m_weights = std::unique_ptr<DarknetWeightsLoader>(new DarknetWeightsLoader(dt));

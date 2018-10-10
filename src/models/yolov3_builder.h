@@ -4,7 +4,6 @@
 #include "model_builder.h"
 #include "darknet_weights_loader.h"
 #include "conv2d_batch_leaky.h"
-#include "leaky_relu_plugin.h"
 #include "upsample_plugin.h"
 #include "fp16.h"
 #include <NvInfer.h>
@@ -14,6 +13,7 @@
 namespace jetnet
 {
 
+template<typename TActivation>
 class Yolov3Builder : public ModelBuilder
 {
 public:
@@ -40,7 +40,13 @@ public:
                   nvinfer1::DimsCHW input_dimenstions,
                   OutputSpec output_large,
                   OutputSpec output_mid,
-                  OutputSpec output_small);
+                  OutputSpec output_small) :
+        m_input_blob_name(input_blob_name),
+        m_weightsfile(weightsfile),
+        m_input_dimensions(input_dimenstions),
+        m_output_large(output_large),
+        m_output_mid(output_mid),
+        m_output_small(output_small) {}
 
     nvinfer1::INetworkDefinition* parse(nvinfer1::DataType dt) override;
 
@@ -61,7 +67,7 @@ private:
     std::unique_ptr<DarknetWeightsLoader> m_weights;
     std::unique_ptr<UpsamplePlugin> m_upsample_plugin0;
     std::unique_ptr<UpsamplePlugin> m_upsample_plugin1;
-    Conv2dBatchLeaky<LeakyReluPlugin> m_convs[72];
+    Conv2dBatchLeaky<TActivation> m_convs[72];
 
 };
 

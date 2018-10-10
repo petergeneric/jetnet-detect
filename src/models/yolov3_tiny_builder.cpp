@@ -1,25 +1,18 @@
 #include "yolov3_tiny_builder.h"
 #include "custom_assert.h"
+#include "leaky_relu_plugin.h"
+#include "leaky_relu_native.h"
 #include "logger.h"
 #include <limits>
 
 using namespace jetnet;
 using namespace nvinfer1;
 
-Yolov3TinyBuilder::Yolov3TinyBuilder(std::string input_blob_name,
-                  std::string weightsfile,
-                  nvinfer1::DimsCHW input_dimenstions,
-                  OutputSpec output_large,
-                  OutputSpec output_small) :
-    m_input_blob_name(input_blob_name),
-    m_weightsfile(weightsfile),
-    m_input_dimensions(input_dimenstions),
-    m_output_large(output_large),
-    m_output_small(output_small)
-{
-}
+template class Yolov3TinyBuilder<LeakyReluPlugin>;
+template class Yolov3TinyBuilder<LeakyReluNative>;
 
-INetworkDefinition* Yolov3TinyBuilder::parse(DataType dt)
+template<typename TActivation>
+INetworkDefinition* Yolov3TinyBuilder<TActivation>::parse(DataType dt)
 {
     m_logger->log(ILogger::Severity::kINFO, "Opening weights file '" + m_weightsfile + "'");
     m_weights = std::unique_ptr<DarknetWeightsLoader>(new DarknetWeightsLoader(dt));

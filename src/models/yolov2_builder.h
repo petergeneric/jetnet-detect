@@ -4,7 +4,6 @@
 #include "model_builder.h"
 #include "darknet_weights_loader.h"
 #include "conv2d_batch_leaky.h"
-#include "leaky_relu_plugin.h"
 #include "fp16.h"
 #include <NvInfer.h>
 #include <memory>
@@ -13,6 +12,7 @@
 namespace jetnet
 {
 
+template<typename TActivation>
 class Yolov2Builder : public ModelBuilder
 {
 public:
@@ -61,7 +61,7 @@ private:
      *  layer states (weights, layers and plugins)
      */
     std::unique_ptr<DarknetWeightsLoader> m_weights;
-    Conv2dBatchLeaky<LeakyReluPlugin> m_convs[22];
+    Conv2dBatchLeaky<TActivation> m_convs[22];
 
     void (*nvPluginDeleter)(nvinfer1::plugin::INvPlugin*){[](nvinfer1::plugin::INvPlugin* ptr) { ptr->destroy(); }};
     std::unique_ptr<nvinfer1::plugin::INvPlugin, decltype(nvPluginDeleter)> m_reorg_plugin{nullptr, nvPluginDeleter};
