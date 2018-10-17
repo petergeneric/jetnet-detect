@@ -15,7 +15,7 @@ namespace jetnet
 class CvLetterBoxPreProcessor
 {
 public:
-    
+
     /*
      *  input_blob_name:    name of the input tensor, needed to know the input dimensions
      *  channel_map:        Determines the order of how the image channels must be arraged

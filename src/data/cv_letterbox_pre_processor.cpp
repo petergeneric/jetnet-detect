@@ -76,31 +76,32 @@ bool CvLetterBoxPreProcessor::cv_to_tensor_data(const cv::Mat& input, float* out
     }
 
     if (input.depth() != CV_8U) {
-        std::cout << input.depth() << std::endl;
         m_logger->log(ILogger::Severity::kERROR, "This pre-processor currently only supports CV_8U image channels");
         return false;
     }
 
     // copy input image to gpu
     input_gpu.upload(input);
+
+    // assign Mat objs in case some steps can be bypassed
     roi_image_float = m_image_resized_float;
 
-    // if image does not fit network input resolution, resize first but keep aspect ratio using letter boxing
+    // if image does not fit network input resolution, check if resize and or letterboxing is needed
     if (in_width != m_net_in_w || in_height != m_net_in_h) {
 
-        // if aspect ratio differs, use letterboxing, else just resize
+        // if aspect ratio differs, apply letterboxing
         if (in_height * m_net_in_w != in_width * m_net_in_h) {
 
             // calculate rectangles for letterboxing
             if (in_height * m_net_in_w < in_width * m_net_in_h) {
                 const int image_h = (in_height * m_net_in_w) / in_width;
-                const int border_h = (m_net_in_h - image_h) / 2;
+                const int border_h = std::ceil((m_net_in_h - image_h) / 2.0);
                 rect_image = cv::Rect(0, border_h, m_net_in_w, image_h);
                 rect_greyborder1 = cv::Rect(0, 0, m_net_in_w, border_h);
                 rect_greyborder2 = cv::Rect(0, (m_net_in_h + image_h) / 2, m_net_in_w, border_h);
             } else {
                 const int image_w = (in_width * m_net_in_h) / in_height;
-                const int border_w = (m_net_in_w - image_w) / 2;
+                const int border_w = std::ceil((m_net_in_w - image_w) / 2.0);
                 rect_image = cv::Rect(border_w, 0, image_w, m_net_in_h);
                 rect_greyborder1 = cv::Rect(0, 0, border_w, m_net_in_h);
                 rect_greyborder2 = cv::Rect((m_net_in_w + image_w) / 2, 0, border_w, m_net_in_h);
@@ -109,23 +110,27 @@ bool CvLetterBoxPreProcessor::cv_to_tensor_data(const cv::Mat& input, float* out
             roi_image = cv::cuda::GpuMat(m_image_resized, rect_image);
             roi_image_float = cv::cuda::GpuMat(m_image_resized_float, rect_image);          // image area
 
-            // safety check to avoid setTo on empty Mat
-            if (rect_greyborder1.area() != 0) {
-                roi_greyborder1 = cv::cuda::GpuMat(m_image_resized_float, rect_greyborder1);    // grey area top/left
-                roi_greyborder2 = cv::cuda::GpuMat(m_image_resized_float, rect_greyborder2);    // grey area bottom/right
+            roi_greyborder1 = cv::cuda::GpuMat(m_image_resized_float, rect_greyborder1);    // grey area top/left
+            roi_greyborder2 = cv::cuda::GpuMat(m_image_resized_float, rect_greyborder2);    // grey area bottom/right
 
-                // paint borders grey
-                roi_greyborder1.setTo(border_color);
-                roi_greyborder2.setTo(border_color);
-            }
+            // paint borders grey
+            roi_greyborder1.setTo(border_color);
+            roi_greyborder2.setTo(border_color);
 
         } else {
-            // only resize
             roi_image = m_image_resized;
         }
 
-        // resize
-        cv::cuda::resize(input_gpu, roi_image, roi_image.size(), 0, 0, cv::INTER_LINEAR);
+        // resize if dimensions of the input image are different from the
+        // ROI dimensions within the network input area
+        if (input_gpu.size() != roi_image.size()) {
+            cv::cuda::resize(input_gpu, roi_image, roi_image.size(), 0, 0, cv::INTER_LINEAR);
+        } else {
+            roi_image = input_gpu;
+        }
+
+    } else {
+        roi_image = input_gpu;
     }
 
     // uint8 to float image and normalise (between 0 and 1)

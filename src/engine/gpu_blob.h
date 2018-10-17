@@ -31,7 +31,7 @@ struct GpuBlob
 
     /*
      *  Download GPU data blob to the CPU
-     *  The user is responsible for mamaging the CPU data
+     *  The user is responsible for mamnaging the CPU data
      *  data:   CPU data buffer to be filled
      *  size:   number of float numbers to download (<= size of data buffer)
      */
