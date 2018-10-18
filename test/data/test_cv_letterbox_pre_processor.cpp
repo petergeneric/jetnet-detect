@@ -123,6 +123,7 @@ protected:
         MockCudaEngine engine;
         EXPECT_CALL(engine, getBindingIndex(_)).WillOnce(Return(0));
         EXPECT_CALL(engine, getBindingDimensions(_)).WillOnce(Return(dims));
+        EXPECT_CALL(engine, getMaxBatchSize()).WillOnce(Return(1));
 
         pre->init(&engine);
     }

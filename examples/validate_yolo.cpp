@@ -10,7 +10,6 @@
 #include <chrono>
 #include "jetnet.h"
 #include "create_runner.h"
-#include "fast_image_reader.h"
 
 using namespace jetnet;
 

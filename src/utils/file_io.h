@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include <opencv2/opencv.hpp>
 
 namespace jetnet
 {
@@ -32,6 +33,25 @@ namespace jetnet
      *  Save a float tensor to a file in text format (one float text value per line)
      */
     bool save_tensor_text(const float* data, size_t size, std::string filename);
+
+    /*
+     *  Read an image from disk to opencv. This reader is faster but less versatile compared to
+     *  opencv's imread function. See stb_image.h for more details on supported image formats.
+     *
+     *  filename:           filename of the image
+     *  expected_channels:  number of 8-bit components per pixel. If this is zero, the number
+     *                      of image channels present in the image will be read, otherwise:
+     *
+     *                      N=#comp     components
+     *                      1           grey
+     *                      2           grey, alpha
+     *                      3           red, green, blue
+     *                      4           red, green, blue, alpha
+     *
+     *                      For example, if a grey image is read and expected_channels = 3,
+     *                      the resulting mat will have 3 grey channels
+     */
+    cv::Mat read_image(std::string filename, int expected_channels = 0);
 };
 
 #endif /* JETNET_FILE_IO_H */

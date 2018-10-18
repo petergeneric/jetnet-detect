@@ -20,15 +20,27 @@ public:
     bool init(std::shared_ptr<Logger> logger);
 
     /*
-     *  Check if this platform supports mixed precision f16-bit float
+     *  Check if this platform supports mixed precision 16-bit float
      */
     bool platform_supports_fp16();
 
     /*
-     *  Set the builder in paired image mode
+     *  Check if this platform supports mixed precision 8-bit ints
+     */
+    bool platform_supports_int8();
+
+    /*
+     *  Set the builder in 16-bit float mode (16-bit kernels are allowed to be used,
+     *  this is however not guaranteed)
      *  (see TensorRT developers guide)
      */
-    void platform_set_paired_image_mode();
+    void platform_set_fp16_mode();
+
+    /*
+     *  Set the builder in 8-bit int mode
+     *  calibrator: calibrator class for calibrating the int8 weights
+     */
+    void platform_set_int8_mode(nvinfer1::IInt8Calibrator* calibrator);
 
     /*
      *  Generic parser method that creates the network definition.

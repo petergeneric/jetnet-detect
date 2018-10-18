@@ -4,6 +4,8 @@ set (HEADERS
     data/detection.h
     data/fake_post_processor.h
     data/fake_pre_processor.h
+    data/int8_calibrator.h
+    data/letterbox_int8_calibrator.h
     data/nms.h
     data/yolo_post_processor.h
     engine/model_builder.h
@@ -33,6 +35,8 @@ set (SOURCES
     data/cv_letterbox_pre_processor.cpp
     data/fake_post_processor.cpp
     data/fake_pre_processor.cpp
+    data/int8_calibrator.cpp
+    data/letterbox_int8_calibrator.cpp
     data/nms.cpp
     data/yolo_post_processor.cpp
     engine/model_builder.cpp

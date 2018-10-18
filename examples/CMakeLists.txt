@@ -6,8 +6,8 @@ link_libraries (
 )
 
 add_executable (jetnet_build_darknet_model build_darknet_model.cpp)
-add_executable (jetnet_run_yolo run_yolo.cpp fast_image_reader.cpp)
-add_executable (jetnet_validate_yolo validate_yolo.cpp fast_image_reader.cpp)
+add_executable (jetnet_run_yolo run_yolo.cpp)
+add_executable (jetnet_validate_yolo validate_yolo.cpp)
 
 install (TARGETS
     jetnet_build_darknet_model

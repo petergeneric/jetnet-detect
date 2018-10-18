@@ -20,9 +20,24 @@ bool ModelBuilder::platform_supports_fp16()
     return m_builder->platformHasFastFp16();
 }
 
-void ModelBuilder::platform_set_paired_image_mode()
+bool ModelBuilder::platform_supports_int8()
 {
+    return m_builder->platformHasFastInt8();
+}
+
+void ModelBuilder::platform_set_fp16_mode()
+{
+#if (NV_TENSORRT_MAJOR <= 3)
     m_builder->setHalf2Mode(true);
+#else
+    m_builder->setFp16Mode(true);
+#endif
+}
+
+void ModelBuilder::platform_set_int8_mode(IInt8Calibrator* calibrator)
+{
+    m_builder->setInt8Mode(true);
+    m_builder->setInt8Calibrator(calibrator);
 }
 
 ICudaEngine* ModelBuilder::build(int maxBatchSize)

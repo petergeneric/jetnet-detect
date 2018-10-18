@@ -17,7 +17,8 @@ class CvLetterBoxPreProcessor
 public:
 
     /*
-     *  input_blob_name:    name of the input tensor, needed to know the input dimensions
+     *  input_blob_name:    name of the input tensor, needed to retrieve the input blob index.
+     *                      This param is only used when calling init(engine);
      *  channel_map:        Determines the order of how the image channels must be arraged
      *                      Example: If the channels of the input image have order BGR
      *                      and the network expects RGB, then channel_map = [2, 1, 0]
@@ -30,7 +31,14 @@ public:
                             std::shared_ptr<Logger> logger);
 
     /*
-     *  Called by the model runner after network is deserialized
+     *  Init pre processor with network information
+     *  input_dims:         network input dimensions
+     *  max_batch_size:     the maximum batch size the network can handle
+     */
+    bool init(nvinfer1::DimsCHW input_dims, size_t max_batch_size, int input_blob_index = 0);
+
+    /*
+     *  Init pre processor with runtime information
      *  engine:             reference to deserialized inference engine
      *  returns True on success
      */
@@ -64,6 +72,7 @@ private:
     int m_net_in_w;
     int m_net_in_h;
     int m_net_in_c;
+    size_t m_max_batch_size;
 
     int m_in_row_step;
     int m_in_channel_step;

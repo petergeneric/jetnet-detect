@@ -14,17 +14,14 @@ CvLetterBoxPreProcessor::CvLetterBoxPreProcessor(std::string input_blob_name,
 {
 }
 
-bool CvLetterBoxPreProcessor::init(const ICudaEngine* engine)
+bool CvLetterBoxPreProcessor::init(DimsCHW input_dims, size_t max_batch_size, int input_blob_index)
 {
-    Dims network_input_dims;
+    m_net_in_w = input_dims.w();
+    m_net_in_h = input_dims.h();
+    m_net_in_c = input_dims.c();
+    m_max_batch_size = max_batch_size;
+    m_input_blob_index = input_blob_index;
 
-    m_input_blob_index = engine->getBindingIndex(m_input_blob_name.c_str());
-    network_input_dims = engine->getBindingDimensions(m_input_blob_index);
-
-    // input tensor CHW order
-    m_net_in_c = network_input_dims.d[0];
-    m_net_in_h = network_input_dims.d[1];
-    m_net_in_w = network_input_dims.d[2];
     m_in_row_step = m_net_in_w;
     m_in_channel_step = m_net_in_w * m_net_in_h;
     m_in_batch_step = m_net_in_w * m_net_in_h * m_net_in_c;
@@ -41,6 +38,15 @@ bool CvLetterBoxPreProcessor::init(const ICudaEngine* engine)
     return true;
 }
 
+bool CvLetterBoxPreProcessor::init(const ICudaEngine* engine)
+{
+    int index = engine->getBindingIndex(m_input_blob_name.c_str());
+    Dims dims = engine->getBindingDimensions(index);
+    DimsCHW dims_chw(dims.d[0], dims.d[1], dims.d[2]);
+
+    return init(dims_chw, engine->getMaxBatchSize(), index);
+}
+
 void CvLetterBoxPreProcessor::register_images(std::vector<cv::Mat> images)
 {
     m_registered_images = images;
@@ -48,9 +54,20 @@ void CvLetterBoxPreProcessor::register_images(std::vector<cv::Mat> images)
 
 bool CvLetterBoxPreProcessor::operator()(std::map<int, GpuBlob>& input_blobs, std::vector<cv::Size>& image_sizes)
 {
-    float* data = reinterpret_cast<float*>(input_blobs.at(m_input_blob_index).get());
+    // ensure input_blobs are allocated
+    if (input_blobs.empty()) {
+        GpuBlob blob(m_in_batch_step * m_max_batch_size);
+        input_blobs.insert(std::pair<int, GpuBlob>(m_input_blob_index, std::move(blob)));
+    }
+
+    if (m_registered_images.size() > m_max_batch_size) {
+        m_logger->log(ILogger::Severity::kERROR, "The number of registered images (" +
+                std::to_string(m_registered_images.size()) + ") exceeds the maximum batch size ");
+        return false;
+    }
 
     // fill all batches of the input blob
+    float* data = reinterpret_cast<float*>(input_blobs.at(m_input_blob_index).get());
     for (size_t i=0; i<m_registered_images.size(); i++) {
         if (!cv_to_tensor_data(m_registered_images[i], &data[i * m_in_batch_step]))
             return false;

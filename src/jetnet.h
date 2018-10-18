@@ -5,6 +5,8 @@
 #include "detection.h"
 #include "fake_post_processor.h"
 #include "fake_pre_processor.h"
+#include "int8_calibrator.h"
+#include "letterbox_int8_calibrator.h"
 #include "nms.h"
 #include "yolo_post_processor.h"
 #include "model_builder.h"
