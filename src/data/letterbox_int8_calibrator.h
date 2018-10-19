@@ -12,6 +12,7 @@ class LetterboxInt8Calibrator : public Int8Calibrator
 public:
 
     LetterboxInt8Calibrator(std::vector<std::string> file_names,
+                            std::string cache_file,
                             std::shared_ptr<Logger> logger,
                             std::vector<unsigned int> channel_map,
                             nvinfer1::DimsCHW net_in_dims,
@@ -32,14 +33,13 @@ public:
 
 private:
     std::vector<std::string> m_file_names;
-    std::shared_ptr<Logger> m_logger;
     nvinfer1::DimsCHW m_net_in_dims;
     size_t m_batch_size;
-    CvLetterBoxPreProcessor m_pre;
 
     bool m_initialised;
     size_t m_file_idx;
 
+    CvLetterBoxPreProcessor m_pre;
     std::map<int, GpuBlob> m_blobs;
 };
 

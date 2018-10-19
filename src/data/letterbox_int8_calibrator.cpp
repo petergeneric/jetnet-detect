@@ -7,17 +7,18 @@ using namespace jetnet;
 using namespace nvinfer1;
 
 LetterboxInt8Calibrator::LetterboxInt8Calibrator(std::vector<std::string> file_names,
+                                                 std::string cache_file,
                                                  std::shared_ptr<Logger> logger,
                                                  std::vector<unsigned int> channel_map,
                                                  nvinfer1::DimsCHW net_in_dims,
                                                  size_t batch_size) :
+    Int8Calibrator(cache_file, logger),
     m_file_names(file_names),
-    m_logger(logger),
     m_net_in_dims(net_in_dims),
     m_batch_size(batch_size),
-    m_pre("", channel_map, logger),
     m_initialised(false),
-    m_file_idx(0)
+    m_file_idx(0),
+    m_pre("", channel_map, logger)
 {
 }
 
@@ -39,7 +40,7 @@ bool LetterboxInt8Calibrator::getBatch(void* bindings[], const char* names[], in
     }
 
     // check if there is still enough data to fill a batch
-    if (m_file_idx + m_batch_size > m_file_names.size() - 1) {
+    if (m_file_idx + m_batch_size > m_file_names.size()) {
         m_logger->log(ILogger::Severity::kINFO, "Calibrator: read all images or not enough images to fill "
                                                 "another complete batch. Signalling end of calibration set");
         return false;

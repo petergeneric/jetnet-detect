@@ -2,6 +2,7 @@
 #include "custom_assert.h"
 #include "leaky_relu_plugin.h"
 #include "leaky_relu_native.h"
+#include "relu.h"
 #include "logger.h"
 #include <limits>
 
@@ -10,6 +11,7 @@ using namespace nvinfer1;
 
 template class Yolov3TinyBuilder<LeakyReluPlugin>;
 template class Yolov3TinyBuilder<LeakyReluNative>;
+template class Yolov3TinyBuilder<Relu>;
 
 #if (NV_TENSORRT_MAJOR <= 3)
 
@@ -18,7 +20,7 @@ INetworkDefinition* Yolov3TinyBuilder<TActivation>::parse(DataType dt)
 {
     (void)dt;
 
-    m_logger->log(ILogger::Severity::kERROR, "Yolov3 tiny is not supported with TensorRT 3.X and earlier");    
+    m_logger->log(ILogger::Severity::kERROR, "Yolov3 tiny is not supported with TensorRT 3.X and earlier");
     return nullptr;
 }
 

@@ -2,6 +2,7 @@
 #include "custom_assert.h"
 #include "leaky_relu_plugin.h"
 #include "leaky_relu_native.h"
+#include "relu.h"
 #include "logger.h"
 
 using namespace jetnet;
@@ -9,6 +10,7 @@ using namespace nvinfer1;
 
 template class Yolov3Builder<LeakyReluPlugin>;
 template class Yolov3Builder<LeakyReluNative>;
+template class Yolov3Builder<Relu>;
 
 template<typename TActivation>
 INetworkDefinition* Yolov3Builder<TActivation>::parse(DataType dt)

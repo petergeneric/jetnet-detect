@@ -4,6 +4,8 @@
 #include <NvInfer.h>
 #include <vector>
 #include <string>
+#include <memory>
+#include "logger.h"
 
 namespace jetnet
 {
@@ -14,8 +16,7 @@ public:
     /*
      *  Abstract class which only provides implementations for handling the calibration cache
      */
-    Int8Calibrator();
-    Int8Calibrator(std::string cache_file);
+    Int8Calibrator(std::string cache_file, std::shared_ptr<Logger> logger);
 
     /*
      *  Read the calibration cache from disk
@@ -33,6 +34,11 @@ public:
 
 private:
     std::string m_cache_file;
+
+protected:
+    std::shared_ptr<Logger> m_logger;
+
+private:
     std::vector<char> m_cache_data;
 };
 

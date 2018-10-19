@@ -18,6 +18,7 @@
 #include "yolov3_tiny_builder.h"
 #include "leaky_relu_native.h"
 #include "leaky_relu_plugin.h"
+#include "relu.h"
 #include "conv2d_batch_leaky.h"
 #include "blas_cuda.h"
 #include "upsample_plugin.h"

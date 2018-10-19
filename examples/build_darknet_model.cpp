@@ -13,16 +13,17 @@ using namespace jetnet;
 int main(int argc, char** argv)
 {
     std::string keys =
-        "{help h usage ? |      | print this message                            }"
-        "{@modelname     |<none>| model name to build                           }"
-        "{@weightsfile   |<none>| darknet weights file                          }"
-        "{@planfile      |<none>| serializes GIE output file                    }"
-        "{fp16           |      | optimize for FP16 precision (FP32 by default) }"
-        "{int8calfiles   |      | INT8 optimization calibration file list.      }"
-        "{int8batch      | 50   | Batch size for INT8 calibration procedure     }"
-        "{w width        | 416  | network input width in pixels                 }"
-        "{h height       | 416  | network input height in pixels                }"
-        "{mb maxbatch    | 1    | maximum batch size the network must handle    }";
+        "{help h usage ? |      | print this message                              }"
+        "{@modelname     |<none>| model name to build                             }"
+        "{@weightsfile   |<none>| darknet weights file                            }"
+        "{@planfile      |<none>| serializes GIE output file                      }"
+        "{fp16           |      | optimize for FP16 precision (FP32 by default)   }"
+        "{int8calfiles   |      | INT8 optimization calibration file list.        }"
+        "{int8cache      |      | INT8 cache file. This file is network dependent }"
+        "{int8batch      | 50   | Batch size for INT8 calibration procedure       }"
+        "{w width        | 416  | network input width in pixels                   }"
+        "{h height       | 416  | network input height in pixels                  }"
+        "{mb maxbatch    | 1    | maximum batch size the network must handle      }";
 
     cv::CommandLineParser parser(argc, argv, keys);
     parser.about("Jetnet darknet model builder");
@@ -38,6 +39,7 @@ int main(int argc, char** argv)
     auto float_16_opt = parser.has("fp16");
     auto int8_opt = parser.has("int8calfiles");
     auto int8_cal_file_list = parser.get<std::string>("int8calfiles");
+    auto int8_cache_file = parser.get<std::string>("int8cache");
     auto int8_batch_size = parser.get<int>("int8batch");
     auto input_width = parser.get<int>("width");
     auto input_height = parser.get<int>("height");
@@ -93,7 +95,7 @@ int main(int argc, char** argv)
             return -1;
         }
 
-        calibrator = std::make_shared<LetterboxInt8Calibrator>(image_paths, logger,
+        calibrator = std::make_shared<LetterboxInt8Calibrator>(image_paths, int8_cache_file, logger,
                                                                std::vector<unsigned int>{0, 1, 2},
                                                                nvinfer1::DimsCHW{3, input_height, input_width},
                                                                int8_batch_size);
