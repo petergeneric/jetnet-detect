@@ -21,10 +21,10 @@ int main(int argc, char** argv)
         "{int8calfiles   |      | INT8 optimization calibration file list.        }"
         "{int8cache      |      | INT8 cache file. This file is network dependent }"
         "{int8batch      | 50   | Batch size for INT8 calibration procedure       }"
-        "{w width        | 416  | network input width in pixels                   }"
-        "{h height       | 416  | network input height in pixels                  }"
+        "{width          | 416  | network input width in pixels                   }"
+        "{height         | 416  | network input height in pixels                  }"
         "{dla            |      | Run network on DLA i.s.o. GPU                   }"
-        "{mb maxbatch    | 1    | maximum batch size the network must handle      }";
+        "{maxbatch       | 1    | maximum batch size the network must handle      }";
 
     cv::CommandLineParser parser(argc, argv, keys);
     parser.about("Jetnet darknet model builder");
