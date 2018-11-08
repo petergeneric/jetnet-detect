@@ -34,6 +34,17 @@ void ModelBuilder::platform_set_fp16_mode()
 #endif
 }
 
+void ModelBuilder::platform_set_device_type(DeviceType value)
+{
+#if (NV_TENSORRT_MAJOR <= 4)
+    (void)value;
+    m_logger->log("Setting default device type is not supported in this version of TensorRT"
+                  ", ignoring request");
+#else
+    m_builder->setDefaultDeviceType(static_cast<nvinfer1::DeviceType>(value));
+#endif
+}
+
 void ModelBuilder::platform_set_int8_mode(IInt8Calibrator* calibrator)
 {
     m_builder->setInt8Mode(true);

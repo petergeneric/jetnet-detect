@@ -23,6 +23,7 @@ int main(int argc, char** argv)
         "{int8batch      | 50   | Batch size for INT8 calibration procedure       }"
         "{w width        | 416  | network input width in pixels                   }"
         "{h height       | 416  | network input height in pixels                  }"
+        "{dla            |      | Run network on DLA i.s.o. GPU                   }"
         "{mb maxbatch    | 1    | maximum batch size the network must handle      }";
 
     cv::CommandLineParser parser(argc, argv, keys);
@@ -43,6 +44,7 @@ int main(int argc, char** argv)
     auto int8_batch_size = parser.get<int>("int8batch");
     auto input_width = parser.get<int>("width");
     auto input_height = parser.get<int>("height");
+    auto dla = parser.has("dla");
     auto max_batch_size = parser.get<int>("maxbatch");
 
     if (!parser.check()) {
@@ -101,6 +103,11 @@ int main(int argc, char** argv)
                                                                int8_batch_size);
 
         builder->platform_set_int8_mode(calibrator.get());
+    }
+
+    if (dla) {
+        std::cout << "Building for execution on DLA" << std::endl;
+        builder->platform_set_device_type(ModelBuilder::DeviceType::DLA);
     }
 
     std::cout << "Parsing the network..." << std::endl;

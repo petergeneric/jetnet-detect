@@ -12,6 +12,13 @@ namespace jetnet
 class ModelBuilder
 {
 public:
+    enum class DeviceType : int {
+        GPU,
+        DLA,
+        DLA0 = DLA,
+        DLA1
+    };
+
     /*
      *  Init stuff
      *  logger: all internal errors and info messages are send to this logger
@@ -41,6 +48,11 @@ public:
      *  calibrator: calibrator class for calibrating the int8 weights
      */
     void platform_set_int8_mode(nvinfer1::IInt8Calibrator* calibrator);
+
+    /*
+     *	Set default device type to execute the network on (Xavier platform)
+     */
+    void platform_set_device_type(DeviceType value);
 
     /*
      *  Generic parser method that creates the network definition.
