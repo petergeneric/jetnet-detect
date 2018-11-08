@@ -34,14 +34,19 @@ void ModelBuilder::platform_set_fp16_mode()
 #endif
 }
 
-void ModelBuilder::platform_set_device_type(DeviceType value)
+void ModelBuilder::platform_use_dla(int device)
 {
 #if (NV_TENSORRT_MAJOR <= 4)
     (void)value;
-    m_logger->log("Setting default device type is not supported in this version of TensorRT"
+    m_logger->log(ILogger::Severity::kERROR, "Building for DLA is not supported in this version of TensorRT"
                   ", ignoring request");
 #else
-    m_builder->setDefaultDeviceType(static_cast<nvinfer1::DeviceType>(value));
+    DeviceType dtype = device == 0 ? DeviceType::kDLA0 : DeviceType::kDLA1;
+    m_builder->setDefaultDeviceType(dtype);
+    m_builder->allowGPUFallback(true);
+
+    m_logger->log(ILogger::Severity::kINFO, "Max batch size this DLA supports is " +
+                                std::to_string(m_builder->getMaxDLABatchSize(dtype)));
 #endif
 }
 

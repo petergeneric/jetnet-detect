@@ -12,13 +12,6 @@ namespace jetnet
 class ModelBuilder
 {
 public:
-    enum class DeviceType : int {
-        GPU,
-        DLA,
-        DLA0 = DLA,
-        DLA1
-    };
-
     /*
      *  Init stuff
      *  logger: all internal errors and info messages are send to this logger
@@ -50,9 +43,12 @@ public:
     void platform_set_int8_mode(nvinfer1::IInt8Calibrator* calibrator);
 
     /*
-     *	Set default device type to execute the network on (Xavier platform)
+     *	Build network for DLA i.s.o. GPU. Calling this method will also
+     *	enable GPU fallback in case a layer cannot be executed on DLA (plugins)
+     *	NOTE: only supported for Xavier platform
+     *	device: DLA device id (0 or 1 for Xavier platform)
      */
-    void platform_set_device_type(DeviceType value);
+    void platform_use_dla(int device);
 
     /*
      *  Generic parser method that creates the network definition.
