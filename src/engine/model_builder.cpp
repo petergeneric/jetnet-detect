@@ -37,7 +37,7 @@ void ModelBuilder::platform_set_fp16_mode()
 void ModelBuilder::platform_use_dla(int device)
 {
 #if (NV_TENSORRT_MAJOR <= 4)
-    (void)value;
+    (void)device;
     m_logger->log(ILogger::Severity::kERROR, "Building for DLA is not supported in this version of TensorRT"
                   ", ignoring request");
 #else

@@ -8,12 +8,14 @@ class DarknetBuilderFactory
 {
     int m_input_width;
     int m_input_height;
+    int m_num_classes;
 
 public:
 
-    DarknetBuilderFactory(int input_width, int input_height) :
+    DarknetBuilderFactory(int input_width, int input_height, int num_classes) :
         m_input_width(input_width),
-        m_input_height(input_height)
+        m_input_height(input_height),
+        m_num_classes(num_classes)
     {
     }
 
@@ -66,7 +68,7 @@ public:
         const std::string output_blob3_name = "probs3";
 
         const int num_anchors = 3;
-        const int num_classes = 80;
+        const int num_classes = m_num_classes;
         const int num_coords = 4;
 
         typename jetnet::Yolov3Builder<T>::OutputSpec outspec_large{output_blob1_name,  num_anchors, num_classes, num_coords};
@@ -85,7 +87,7 @@ public:
         const std::string output_blob2_name = "probs2";
 
         const int num_anchors = 3;
-        const int num_classes = 80;
+        const int num_classes = m_num_classes;
         const int num_coords = 4;
 
         typename jetnet::Yolov3TinyBuilder<T>::OutputSpec outspec_large{output_blob1_name,  num_anchors, num_classes, num_coords};

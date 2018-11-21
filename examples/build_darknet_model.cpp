@@ -23,6 +23,7 @@ int main(int argc, char** argv)
         "{int8batch      | 50   | Batch size for INT8 calibration procedure       }"
         "{width          | 416  | network input width in pixels                   }"
         "{height         | 416  | network input height in pixels                  }"
+        "{classes        | 80   | number of network output classes                }"
         "{dla            |      | Enable building for execution on dla            }"
         "{dladevice      | 0    | DLA device id to build for                      }"
         "{maxbatch       | 1    | maximum batch size the network must handle      }";
@@ -45,6 +46,7 @@ int main(int argc, char** argv)
     auto int8_batch_size = parser.get<int>("int8batch");
     auto input_width = parser.get<int>("width");
     auto input_height = parser.get<int>("height");
+    auto num_classes = parser.get<int>("classes");
     auto use_dla = parser.has("dla");
     auto dla_id = parser.get<int>("dladevice");
     auto max_batch_size = parser.get<int>("maxbatch");
@@ -54,7 +56,7 @@ int main(int argc, char** argv)
         return 0;
     }
 
-    DarknetBuilderFactory builder_fact(input_width, input_height);
+    DarknetBuilderFactory builder_fact(input_width, input_height, num_classes);
 
     auto builder = builder_fact.create(model_name, weights_file);
 
