@@ -10,6 +10,7 @@ class YoloRunnerFactory
     float m_threshold;
     float m_nms_threshold;
     size_t m_batch_size;
+    std::vector<float> m_anchor_priors;
     bool m_enable_profiling;
 
 public:
@@ -18,11 +19,13 @@ public:
     typedef std::shared_ptr<jetnet::YoloPostProcessor>          PostType;
     typedef std::shared_ptr<jetnet::ModelRunner<jetnet::CvLetterBoxPreProcessor, jetnet::YoloPostProcessor>> RunnerType;
 
-    YoloRunnerFactory(size_t num_classes, float threshold, float nms_threshold, size_t batch_size, bool enable_profiling=false) :
+    YoloRunnerFactory(size_t num_classes, float threshold, float nms_threshold, size_t batch_size,
+                      std::vector<float> anchor_priors, bool enable_profiling=false) :
         m_num_classes(num_classes),
         m_threshold(threshold),
         m_nms_threshold(nms_threshold),
         m_batch_size(batch_size),
+        m_anchor_priors(anchor_priors),
         m_enable_profiling(enable_profiling)
     {
     }
@@ -45,20 +48,25 @@ public:
         const std::string input_blob_name = "data";
         const std::string output_blob_name = "probs";
 
-        const std::vector<float> anchor_priors{0.57273, 0.677385,
-                                               1.87446, 2.06253,
-                                               3.33843, 5.47434,
-                                               7.88282, 3.52778,
-                                               9.77052, 9.16828};
-
         auto logger = std::make_shared<jetnet::Logger>(nvinfer1::ILogger::Severity::kINFO);
         auto plugin_fact = std::make_shared<jetnet::YoloPluginFactory>(logger);
+
+        if (!m_anchor_priors.empty()) {
+            std::cout << "Using custom anchor priors" << std::endl;
+        } else {
+            std::cout << "Using default anchor priors" << std::endl;
+            m_anchor_priors = std::vector<float>{0.57273, 0.677385,
+                                                 1.87446, 2.06253,
+                                                 3.33843, 5.47434,
+                                                 7.88282, 3.52778,
+                                                 9.77052, 9.16828};
+        }
 
         std::vector<unsigned int> channel_map{0, 1, 2};     //read_image read RGB order, network expects RGB order
         auto pre = std::make_shared<jetnet::CvLetterBoxPreProcessor>(input_blob_name, channel_map, logger);
 
         std::vector<jetnet::YoloPostProcessor::OutputSpec> output_specs = {
-            jetnet::YoloPostProcessor::OutputSpec { output_blob_name, anchor_priors, m_num_classes }
+            jetnet::YoloPostProcessor::OutputSpec { output_blob_name, m_anchor_priors, m_num_classes }
         };
 
         auto post = std::make_shared<jetnet::YoloPostProcessor>(input_blob_name,
@@ -80,9 +88,21 @@ public:
         const std::string output_blob2_name = "probs2";
         const std::string output_blob3_name = "probs3";
 
-        const std::vector<float> anchor_priors1{116,90, 156,198,373,326};
-        const std::vector<float> anchor_priors2{30, 61, 62, 45, 59, 119};
-        const std::vector<float> anchor_priors3{10, 13, 16, 30, 33, 23};
+        std::vector<float> anchor_priors1;
+        std::vector<float> anchor_priors2;
+        std::vector<float> anchor_priors3;
+
+        if (!m_anchor_priors.empty()) {
+            std::cout << "Using custom anchor priors" << std::endl;
+            anchor_priors3 = std::vector<float>(m_anchor_priors.begin(), m_anchor_priors.begin() + 6);
+            anchor_priors2 = std::vector<float>(m_anchor_priors.begin() + 6, m_anchor_priors.begin() + 12);
+            anchor_priors1 = std::vector<float>(m_anchor_priors.begin() + 12, m_anchor_priors.end());
+        } else {
+            std::cout << "Using default anchor priors" << std::endl;
+            anchor_priors3 = std::vector<float>{10, 13, 16, 30, 33, 23};
+            anchor_priors2 = std::vector<float>{30, 61, 62, 45, 59, 119};
+            anchor_priors1 = std::vector<float>{116,90, 156,198,373,326};
+        }
 
         auto logger = std::make_shared<jetnet::Logger>(nvinfer1::ILogger::Severity::kINFO);
         auto plugin_fact = std::make_shared<jetnet::YoloPluginFactory>(logger);
@@ -114,8 +134,18 @@ public:
         const std::string output_blob1_name = "probs1";
         const std::string output_blob2_name = "probs2";
 
-        const std::vector<float> anchor_priors1{81, 82, 135,169,344,319};
-        const std::vector<float> anchor_priors2{10, 14, 23, 27, 37, 58};
+        std::vector<float> anchor_priors1;
+        std::vector<float> anchor_priors2;
+
+        if (!m_anchor_priors.empty()) {
+            std::cout << "Using custom anchor priors" << std::endl;
+            anchor_priors2 = std::vector<float>(m_anchor_priors.begin(), m_anchor_priors.begin() + 6);
+            anchor_priors1 = std::vector<float>(m_anchor_priors.begin() + 6, m_anchor_priors.end());
+        } else {
+            std::cout << "Using default anchor priors" << std::endl;
+            anchor_priors2 = std::vector<float>{10, 14, 23, 27, 37, 58};
+            anchor_priors1 = std::vector<float>{81, 82, 135,169,344,319};
+        }
 
         auto logger = std::make_shared<jetnet::Logger>(nvinfer1::ILogger::Severity::kINFO);
         auto plugin_fact = std::make_shared<jetnet::YoloPluginFactory>(logger);

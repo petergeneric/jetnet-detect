@@ -13,15 +13,16 @@ using namespace jetnet;
 int main(int argc, char** argv)
 {
     std::string keys =
-        "{help h usage ? |      | print this message }"
-        "{@type          |<none>| Network type (yolov2, yolov3) }"
-        "{@modelfile     |<none>| Built and serialized TensorRT model file }"
-        "{@nameslist     |<none>| Class names list file }"
-        "{@inputimage    |<none>| Input RGB image }"
-        "{profile        |      | Enable profiling }"
-        "{t thresh       | 0.24 | Detection threshold }"
-        "{nt nmsthresh   | 0.45 | Non-maxima suppression threshold }"
-        "{batch          | 1    | Batch size }";
+        "{help h usage ? |      | print this message                        }"
+        "{@type          |<none>| Network type (yolov2, yolov3)             }"
+        "{@modelfile     |<none>| Built and serialized TensorRT model file  }"
+        "{@nameslist     |<none>| Class names list file                     }"
+        "{@inputimage    |<none>| Input RGB image                           }"
+        "{profile        |      | Enable profiling                          }"
+        "{t thresh       | 0.24 | Detection threshold                       }"
+        "{nt nmsthresh   | 0.45 | Non-maxima suppression threshold          }"
+        "{batch          | 1    | Batch size                                }"
+        "{anchors        |      | Anchor prior file name                    }";
 
     cv::CommandLineParser parser(argc, argv, keys);
     parser.about("Jetnet YOLO runner");
@@ -39,6 +40,7 @@ int main(int argc, char** argv)
     auto threshold = parser.get<float>("thresh");
     auto nms_threshold = parser.get<float>("nmsthresh");
     auto batch_size = parser.get<int>("batch");
+    auto anchors_file = parser.get<std::string>("anchors");
 
     if (!parser.check()) {
         parser.printErrors();
@@ -51,7 +53,22 @@ int main(int argc, char** argv)
         return -1;
     }
 
-    YoloRunnerFactory runner_fact(class_names.size(), threshold, nms_threshold, batch_size, enable_profiling);
+    // read anchors file
+    std::vector<std::string> anchor_priors_str;
+    std::vector<float> anchor_priors;
+
+    if (!anchors_file.empty()) {
+        if (!read_text_file(anchor_priors_str, anchors_file)) {
+            std::cerr << "Failed to read anchor priors file" << std::endl;
+            return -1;
+        }
+
+        for (auto str : anchor_priors_str)
+            anchor_priors.push_back(std::stof(str));
+    }
+
+    YoloRunnerFactory runner_fact(class_names.size(), threshold, nms_threshold, batch_size,
+                                  anchor_priors, enable_profiling);
     YoloRunnerFactory::PreType pre;
     YoloRunnerFactory::RunnerType runner;
     YoloRunnerFactory::PostType post;
