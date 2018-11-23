@@ -1,7 +1,8 @@
 #ifndef JETNET_CONV2D_BATCH_LEAKY_IMPL_H
 #define JETNET_CONV2D_BATCH_LEAKY_IMPL_H
 
-#define EPSILON             0.00001L
+#define FLOAT_EPSILON       0.00001L
+#define HALF_EPSILON        0.001L
 
 namespace jetnet
 {
@@ -43,9 +44,12 @@ nvinfer1::ILayer* Conv2dBatchLeaky<TLeaky>::operator()(std::string name,
     std::vector<float> scale_vals(nbOutputMaps);
     std::vector<float> shift_vals(nbOutputMaps);
 
+    // determine machine epsilon based on target precision
+    float epsilon = weights.datatype == nvinfer1::DataType::kHALF ? HALF_EPSILON : FLOAT_EPSILON;
+
     for (int i=0; i<nbOutputMaps; ++i) {
         // cast to double to avoid error buildup in calculations
-        double scale_val = static_cast<double>(bn_raw_scales[i]) / (sqrt(static_cast<double>(bn_raw_variances[i])) + EPSILON);
+        double scale_val = static_cast<double>(bn_raw_scales[i]) / (sqrt(static_cast<double>(bn_raw_variances[i])) + epsilon);
         shift_vals[i] = -static_cast<double>(bn_raw_means[i]) * scale_val + static_cast<double>(biases[i]);
         scale_vals[i] = scale_val;
     }
