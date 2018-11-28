@@ -49,7 +49,9 @@ bool LetterboxInt8Calibrator::getBatch(void* bindings[], const char* names[], in
     // read m_batch_size images
     size_t batch;
     for (batch=0; batch<m_batch_size; ++batch, ++m_file_idx) {
-        images.push_back(read_image(m_file_names[m_file_idx], m_net_in_dims.c()));
+        cv::Mat image = read_image(m_file_names[m_file_idx], m_net_in_dims.c());
+        ASSERT(!image.empty());
+        images.push_back(image);
     }
 
     // preprocess the batch

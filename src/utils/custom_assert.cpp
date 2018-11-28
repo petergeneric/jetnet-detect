@@ -1,14 +1,14 @@
 #include "custom_assert.h"
 #include <iostream>
 
-void jetnet::cuda_fatal_error(cudaError_t code, const char *file, int line, const char* msg)
+void jetnet::cuda_assert_failed(cudaError_t code, const char *file, int line, const char* msg)
 {
-    std::cerr << "FATAL CUDA ERROR: " << cudaGetErrorString(code) << " " << " from: " << msg << " " << file << ":" << line << std::endl;
+    std::cerr << "CUDA ASSERT FAILED: " << cudaGetErrorString(code) << " " << " from: " << msg << " " << file << ":" << line << std::endl;
     abort();
 }
 
-void jetnet::fatal_error(const char* file, int line, const char* msg)
+void jetnet::assert_failed(const char* file, int line, const char* msg)
 {
-    std::cerr << "FATAL ERROR: " << msg << " " << file << ":" << line << std::endl;
+    std::cerr << "ASSERT FAILED: " << msg << " " << file << ":" << line << std::endl;
     abort();
 }
