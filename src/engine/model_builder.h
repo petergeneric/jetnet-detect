@@ -51,6 +51,12 @@ public:
     void platform_use_dla(int device);
 
     /*
+     *  If layer types are set to specific precision, use that even if it results
+     *  in lower time performance
+     */
+    void enable_type_strictness();
+
+    /*
      *  Generic parser method that creates the network definition.
      *  Derive from this class to implement your parser. Use the protected
      *  m_network attribute to define your network.

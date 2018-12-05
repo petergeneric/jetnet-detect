@@ -7,8 +7,40 @@
 #include "jetnet.h"
 #include "create_builder.h"
 #include <opencv2/opencv.hpp>   // for commandline parser
+#include <algorithm>
+#include <boost/algorithm/string.hpp>
 
 using namespace jetnet;
+
+static bool parse_layer_names(std::string input, std::vector<std::string>& out)
+{
+    std::string name;
+    bool res = false;
+
+    if (input[0] =='~') {
+        res = true;
+        input.erase(0, 1);
+    }
+
+    boost::split(out, input, [](char c){return c == ',';});
+
+    return res;
+}
+
+static void layerwise_set_precision(nvinfer1::INetworkDefinition* def, std::vector<std::string> layers,
+                                    nvinfer1::DataType type, bool invert=false)
+{
+    for (int i=0; i<def->getNbLayers(); ++i) {
+        auto layer = def->getLayer(i);
+        std::string name = layer->getName();
+        for (auto layer_name: layers) {
+            if ((!invert && name.find(layer_name) == 0) || (invert && name.find(layer_name) != 0)) {
+                layer->setPrecision(type);
+                layer->setOutputType(0, type);
+            }
+        }
+    }
+}
 
 int main(int argc, char** argv)
 {
@@ -26,7 +58,9 @@ int main(int argc, char** argv)
         "{classes        | 80   | number of network output classes                }"
         "{dla            |      | Enable building for execution on dla            }"
         "{dladevice      | 0    | DLA device id to build for                      }"
-        "{maxbatch       | 1    | maximum batch size the network must handle      }";
+        "{maxbatch       | 1    | maximum batch size the network must handle      }"
+        "{floatlayers    |      | CSV list of layer names which must run as floats }"
+        "{halflayers     |      | CSV list of layer names which must run as half floats }";
 
     cv::CommandLineParser parser(argc, argv, keys);
     parser.about("Jetnet darknet model builder");
@@ -40,7 +74,6 @@ int main(int argc, char** argv)
     auto weights_file = parser.get<std::string>("@weightsfile");
     auto output_file = parser.get<std::string>("@planfile");
     auto float_16_opt = parser.has("fp16");
-    auto int8_opt = parser.has("int8calfiles");
     auto int8_cal_file_list = parser.get<std::string>("int8calfiles");
     auto int8_cache_file = parser.get<std::string>("int8cache");
     auto int8_batch_size = parser.get<int>("int8batch");
@@ -50,6 +83,8 @@ int main(int argc, char** argv)
     auto use_dla = parser.has("dla");
     auto dla_id = parser.get<int>("dladevice");
     auto max_batch_size = parser.get<int>("maxbatch");
+    auto float_layers = parser.get<std::string>("floatlayers");
+    auto half_layers = parser.get<std::string>("halflayers");
 
     if (!parser.check()) {
         parser.printErrors();
@@ -87,7 +122,7 @@ int main(int argc, char** argv)
 
     std::shared_ptr<LetterboxInt8Calibrator> calibrator;
 
-    if (int8_opt) {
+    if (!int8_cal_file_list.empty() || !int8_cache_file.empty()) {
         if (!builder->platform_supports_int8()) {
             std::cerr << "Platform does not support INT8 optimization" << std::endl;
             return -1;
@@ -96,7 +131,7 @@ int main(int argc, char** argv)
 
         // reading calibration set file paths
         std::vector<std::string> image_paths;
-        if (!read_text_file(image_paths, int8_cal_file_list)) {
+        if (!int8_cal_file_list.empty() && !read_text_file(image_paths, int8_cal_file_list)) {
             std::cerr << "Failed to read calibration file list: " << int8_cal_file_list << std::endl;
             return -1;
         }
@@ -114,10 +149,30 @@ int main(int argc, char** argv)
         builder->platform_use_dla(dla_id);
     }
 
+    if (!float_layers.empty() || !half_layers.empty()) {
+        std::cout << "Enabling type strictness" << std::endl;
+        builder->enable_type_strictness();
+    }
+
     std::cout << "Parsing the network..." << std::endl;
-    if (builder->parse(weights_datatype) == nullptr) {
+    auto network_def = builder->parse(weights_datatype);
+    if (network_def == nullptr) {
         std::cerr << "Failed to parse network" << std::endl;
         return -1;
+    }
+
+    /* retarget individual layers to float precision */
+    if (!float_layers.empty()) {
+        std::vector<std::string> layers;
+        bool invert = parse_layer_names(float_layers, layers);
+        layerwise_set_precision(network_def, layers, nvinfer1::DataType::kFLOAT, invert);
+    }
+
+    /* retarget individual layers to half float precision */
+    if (!half_layers.empty()) {
+        std::vector<std::string> layers;
+        bool invert = parse_layer_names(half_layers, layers);
+        layerwise_set_precision(network_def, layers, nvinfer1::DataType::kHALF, invert);
     }
 
     std::cout << "Building the network..." << std::endl;

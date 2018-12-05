@@ -56,6 +56,11 @@ void ModelBuilder::platform_set_int8_mode(IInt8Calibrator* calibrator)
     m_builder->setInt8Calibrator(calibrator);
 }
 
+void ModelBuilder::enable_type_strictness()
+{
+    m_builder->setStrictTypeConstraints(true);
+}
+
 ICudaEngine* ModelBuilder::build(int maxBatchSize)
 {
     m_builder->setMaxBatchSize(maxBatchSize);
