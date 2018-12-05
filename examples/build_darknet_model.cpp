@@ -27,21 +27,6 @@ static bool parse_layer_names(std::string input, std::vector<std::string>& out)
     return res;
 }
 
-static void layerwise_set_precision(nvinfer1::INetworkDefinition* def, std::vector<std::string> layers,
-                                    nvinfer1::DataType type, bool invert=false)
-{
-    for (int i=0; i<def->getNbLayers(); ++i) {
-        auto layer = def->getLayer(i);
-        std::string name = layer->getName();
-        for (auto layer_name: layers) {
-            if ((!invert && name.find(layer_name) == 0) || (invert && name.find(layer_name) != 0)) {
-                layer->setPrecision(type);
-                layer->setOutputType(0, type);
-            }
-        }
-    }
-}
-
 int main(int argc, char** argv)
 {
     std::string keys =
@@ -155,8 +140,7 @@ int main(int argc, char** argv)
     }
 
     std::cout << "Parsing the network..." << std::endl;
-    auto network_def = builder->parse(weights_datatype);
-    if (network_def == nullptr) {
+    if (builder->parse(weights_datatype) == nullptr) {
         std::cerr << "Failed to parse network" << std::endl;
         return -1;
     }
@@ -165,14 +149,14 @@ int main(int argc, char** argv)
     if (!float_layers.empty()) {
         std::vector<std::string> layers;
         bool invert = parse_layer_names(float_layers, layers);
-        layerwise_set_precision(network_def, layers, nvinfer1::DataType::kFLOAT, invert);
+        builder->set_layer_precision(layers, nvinfer1::DataType::kFLOAT, invert);
     }
 
     /* retarget individual layers to half float precision */
     if (!half_layers.empty()) {
         std::vector<std::string> layers;
         bool invert = parse_layer_names(half_layers, layers);
-        layerwise_set_precision(network_def, layers, nvinfer1::DataType::kHALF, invert);
+        builder->set_layer_precision(layers, nvinfer1::DataType::kHALF, invert);
     }
 
     std::cout << "Building the network..." << std::endl;

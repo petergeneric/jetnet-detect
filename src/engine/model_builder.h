@@ -5,6 +5,7 @@
 #include <NvInfer.h>
 #include <string>
 #include <memory>
+#include <vector>
 
 namespace jetnet
 {
@@ -55,6 +56,20 @@ public:
      *  in lower time performance
      */
     void enable_type_strictness();
+
+    /*
+     *  Execute layers that start with a specific name with precision 'type'
+     *  If however, that specific layer is faster in a higher precision than requested
+     *  or the requested precision does not exist, this request will be ignored.
+     *  Used 'enable_type_strictness' to override this behavior and use the requested
+     *  precisions regardless of there performance.
+     *  layers: list of layer names (or there first letters)
+     *  type:   precision to set these layers too
+     *  invert: if true, set all layers to this precision except for the layers requested
+     *          (inverted action)
+     */
+    void set_layer_precision(std::vector<std::string> layers,
+                             nvinfer1::DataType type, bool invert=false);
 
     /*
      *  Generic parser method that creates the network definition.

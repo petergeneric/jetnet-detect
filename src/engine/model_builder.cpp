@@ -58,7 +58,40 @@ void ModelBuilder::platform_set_int8_mode(IInt8Calibrator* calibrator)
 
 void ModelBuilder::enable_type_strictness()
 {
+#if (NV_TENSORRT_MAJOR <= 4)
+    m_logger->log(ILogger::Severity::kERROR, "Type strictness is not supported in this version of TensorRT"
+                  ", ignoring request");
+#else
     m_builder->setStrictTypeConstraints(true);
+#endif
+}
+
+void ModelBuilder::set_layer_precision(std::vector<std::string> layers,
+                                       nvinfer1::DataType type, bool invert)
+{
+#if (NV_TENSORRT_MAJOR <= 4)
+    (void)layers;
+    (void)type;
+    (void)invert;
+    m_logger->log(ILogger::Severity::kERROR, "Setting layer-wise precision is not supported in this version of TensorRT"
+                  ", ignoring request");
+#else
+    if (m_network == nullptr) {
+        m_logger->log(ILogger::Severity::kERROR, "Trying to set layer-wise precision but network is not defined");
+        return;
+    }
+
+    for (int i=0; i<def->getNbLayers(); ++i) {
+        auto layer = def->getLayer(i);
+        std::string name = layer->getName();
+        for (auto layer_name: layers) {
+            if ((!invert && name.find(layer_name) == 0) || (invert && name.find(layer_name) != 0)) {
+                layer->setPrecision(type);
+                layer->setOutputType(0, type);
+            }
+        }
+    }
+#endif
 }
 
 ICudaEngine* ModelBuilder::build(int maxBatchSize)
