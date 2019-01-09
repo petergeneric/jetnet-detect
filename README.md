@@ -1,5 +1,5 @@
 # Jetnet
-<img src="jetnet_logo.png" alt="Logo" width="250">
+<img src="doc/jetnet_logo.png" alt="Logo" width="250">
 
 Super fast TensorRT implementation of YOLOv2, YOLOv3 and YOLOv3-tiny
 
