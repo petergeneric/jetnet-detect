@@ -30,7 +30,7 @@ Pre and post processing (included in Jetnet) times are equal for all models give
 | PLATFORM             | Pre processing | Post processing |
 |:---------------------|:---------------|:----------------|
 | JETSON TX2           | 3.5 ms         | 0.8 ms          |
-| JETSON XAVIER        | 2.6 ms         | 0.6 ms          |
+| JETSON Xavier        | 2.6 ms         | 0.6 ms          |
 
 Preprocessing involves converting an opencv Mat object to a GPU input blob while
 Postprocessing involves converting output tensors to detections + applying NMS.
