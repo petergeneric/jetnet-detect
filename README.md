@@ -96,8 +96,6 @@ Building might take a while depending on the speed of your target and selected o
 NOTE: if you did not install jetnet on your system, you will find the executables in the 'examples' folder inside
 the build folder.
 
-TODO: add more example command lines
-
 ## Running a compiled network
 
 Run a compiled model on an image:
@@ -117,3 +115,12 @@ jetnet_validate_yolo --profile yolov3 out.model names_file.names images.txt dete
 Where images.txt is a file with images (one path per line) from the dataset and detections.json are the resulting detections in MS COCO format.
 
 Again use --help for more options on these commands (batch size, thresholds, etc...)
+
+## Paper
+
+See our paper for additional details on experiments:
+
+**Super accurate low latency object detection on a surveillance UAV**  
+*M. Vandersteegen, K. Van Beeck and T. Goedeme*
+
+For more extensive examples on compiling/validating models we refer to our [paper experiments](scipts/paper/README.md).
