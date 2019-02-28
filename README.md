@@ -123,4 +123,4 @@ See our paper for additional details on experiments:
 **Super accurate low latency object detection on a surveillance UAV**  
 *M. Vandersteegen, K. Van Beeck and T. Goedeme*
 
-For more extensive examples on compiling/validating models we refer to our [paper experiments](scipts/paper/README.md).
+For more extensive examples on compiling/validating models we refer to our [paper experiments](https://gitlab.com/EAVISE/jetnet/blob/master/scipts/paper/README.md).
