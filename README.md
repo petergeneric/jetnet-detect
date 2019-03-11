@@ -41,7 +41,7 @@ Dependencies:
 
 * cmake 3.8+
 * TensorRT 3, 4 or 5
-* OpenCV 3.X
+* OpenCV 3.X (with CUDA enabled)
 * libboost-filesystem
 
 Building:
