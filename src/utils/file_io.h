@@ -52,6 +52,8 @@ namespace jetnet
      *                      the resulting mat will have 3 grey channels
      */
     cv::Mat read_image(std::string filename, int expected_channels = 0);
+
+    void write_image(std::string filename, cv::Mat image);
 };
 
 #endif /* JETNET_FILE_IO_H */

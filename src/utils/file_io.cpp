@@ -102,3 +102,12 @@ cv::Mat jetnet::read_image(std::string filename, int expected_channels)
 
     return image;
 }
+
+void jetnet::write_image(std::string filename, cv::Mat image)
+{
+    std::vector<int> compression_params;
+    compression_params.push_back(1);
+    compression_params.push_back(60);
+
+    cv::imwrite(filename, image, compression_params);
+}
