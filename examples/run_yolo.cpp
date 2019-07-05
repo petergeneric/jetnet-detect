@@ -10,6 +10,14 @@
 
 using namespace jetnet;
 
+void log_detections(const std::vector<Detection>& detections, std::vector<std::string> class_labels) {
+	for (auto detection : detections) {
+		auto class_label_index = std::max_element(detection.probabilities.begin(), detection.probabilities.end()) - detection.probabilities.begin();
+		std::string text(std::to_string(static_cast<int>(detection.probabilities[class_label_index] * 100)) + "% " + class_labels[class_label_index]);
+		std::cout << text <<std::endl;
+	}
+}
+
 int main(int argc, char** argv)
 {
     std::string keys =
@@ -113,13 +121,17 @@ int main(int argc, char** argv)
     // get detections and visualise
     auto detections = post->get_detections();
 
+    log_detections(detections[0], class_names);
+
     // image is read in RGB, convert to BGR for display with imshow and bbox rendering
+    ///*
     cv::Mat out;
     cv::cvtColor(images[0], out, cv::COLOR_RGB2BGR);
     draw_detections(detections[0], class_names, out);
-
-    cv::imshow("result", out);
-    cv::waitKey(0);
+    write_image("result.jpg", out);
+    //*/
+    //cv::imshow("result", out);
+    //cv::waitKey(0);
 
     // show profiling if enabled
     runner->print_profiling();
