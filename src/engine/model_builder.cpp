@@ -36,18 +36,18 @@ void ModelBuilder::platform_set_fp16_mode()
 
 void ModelBuilder::platform_use_dla(int device)
 {
-#if (NV_TENSORRT_MAJOR <= 4)
+//if (NV_TENSORRT_MAJOR <= 4)
     (void)device;
     m_logger->log(ILogger::Severity::kERROR, "Building for DLA is not supported in this version of TensorRT"
                   ", ignoring request");
-#else
-    DeviceType dtype = device == 0 ? DeviceType::kDLA0 : DeviceType::kDLA1;
-    m_builder->setDefaultDeviceType(dtype);
-    m_builder->allowGPUFallback(true);
-
-    m_logger->log(ILogger::Severity::kINFO, "Max batch size this DLA supports is " +
-                                std::to_string(m_builder->getMaxDLABatchSize(dtype)));
-#endif
+//#else
+//    DeviceType dtype = device == 0 ? DeviceType::kDLA0 : DeviceType::kDLA1;
+//    m_builder->setDefaultDeviceType(dtype);
+//    m_builder->allowGPUFallback(true);
+//
+//    m_logger->log(ILogger::Severity::kINFO, "Max batch size this DLA supports is " +
+//                                std::to_string(m_builder->getMaxDLABatchSize(dtype)));
+//endif
 }
 
 void ModelBuilder::platform_set_int8_mode(IInt8Calibrator* calibrator)
@@ -69,13 +69,14 @@ void ModelBuilder::enable_type_strictness()
 void ModelBuilder::set_layer_precision(std::vector<std::string> layers,
                                        nvinfer1::DataType type, bool invert)
 {
-#if (NV_TENSORRT_MAJOR <= 4)
+//if (NV_TENSORRT_MAJOR <= 4)
     (void)layers;
     (void)type;
     (void)invert;
     m_logger->log(ILogger::Severity::kERROR, "Setting layer-wise precision is not supported in this version of TensorRT"
                   ", ignoring request");
-#else
+/*
+//else
     if (m_network == nullptr) {
         m_logger->log(ILogger::Severity::kERROR, "Trying to set layer-wise precision but network is not defined");
         return;
@@ -91,7 +92,7 @@ void ModelBuilder::set_layer_precision(std::vector<std::string> layers,
             }
         }
     }
-#endif
+//endif */
 }
 
 ICudaEngine* ModelBuilder::build(int maxBatchSize)
