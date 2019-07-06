@@ -27,6 +27,8 @@ int main(int argc, char** argv)
         "{@nameslist     |<none>| Class names list file                     }"
         "{@inputimage    |<none>| Input RGB image                           }"
         "{profile        |      | Enable profiling                          }"
+        "{imageout       |      | Write annotated output JPG                }"
+        "{profile        |      | Enable profiling                          }"
         "{t thresh       | 0.24 | Detection threshold                       }"
         "{nt nmsthresh   | 0.45 | Non-maxima suppression threshold          }"
         "{batch          | 1    | Batch size                                }"
@@ -44,11 +46,14 @@ int main(int argc, char** argv)
     auto input_model_file = parser.get<std::string>("@modelfile");
     auto input_names_file = parser.get<std::string>("@nameslist");
     auto input_image_file = parser.get<std::string>("@inputimage");
+    auto output_image_filename = parser.get<std::string>("imageout");
     auto enable_profiling = parser.has("profile");
     auto threshold = parser.get<float>("thresh");
     auto nms_threshold = parser.get<float>("nmsthresh");
     auto batch_size = parser.get<int>("batch");
     auto anchors_file = parser.get<std::string>("anchors");
+
+    std::cout << "Output image to: " << output_image_filename << std::endl;
 
     if (!parser.check()) {
         parser.printErrors();
@@ -118,20 +123,22 @@ int main(int argc, char** argv)
         }
     }
 
-    // get detections and visualise
+    // get detections
     auto detections = post->get_detections();
 
+    // Log the detections to the console
     log_detections(detections[0], class_names);
 
-    // image is read in RGB, convert to BGR for display with imshow and bbox rendering
-    ///*
-    cv::Mat out;
-    cv::cvtColor(images[0], out, cv::COLOR_RGB2BGR);
-    draw_detections(detections[0], class_names, out);
-    write_image("result.jpg", out);
-    //*/
-    //cv::imshow("result", out);
-    //cv::waitKey(0);
+    // Optionally output an image file
+    if (!output_image_filename.empty())
+    {
+        std::cout << "Writing annotated image to " << output_image_filename << std::endl;
+        cv::Mat out;
+        // image is read in RGB, convert to BGR for display with imshow and bbox rendering
+        cv::cvtColor(images[0], out, cv::COLOR_RGB2BGR);
+        draw_detections(detections[0], class_names, out);
+        write_image(output_image_filename, out);
+    }
 
     // show profiling if enabled
     runner->print_profiling();
