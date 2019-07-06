@@ -1,3 +1,5 @@
 *.o
 *.plan
-build
+.idea/
+cmake-build-default-jetson/
+build/
