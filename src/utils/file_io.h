@@ -53,6 +53,8 @@ namespace jetnet
      */
     cv::Mat read_image(std::string filename, int expected_channels = 0);
 
+    cv::Mat curl_image(const char *url);
+
     void write_image(std::string filename, cv::Mat image);
 };
 

@@ -108,6 +108,7 @@ bool CvLetterBoxPreProcessor::cv_to_tensor_data(const cv::Mat& input, float* out
 
         // if aspect ratio differs, apply letterboxing
         if (in_height * m_net_in_w != in_width * m_net_in_h) {
+            //std::cout << "Resizing to " << m_net_in_w << "x" << m_net_in_h << std::endl;
 
             // calculate rectangles for letterboxing
             if (in_height * m_net_in_w < in_width * m_net_in_h) {

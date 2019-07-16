@@ -1,12 +1,16 @@
 cmake_minimum_required(VERSION 3.8)
 project(jetnet LANGUAGES CXX CUDA)
 
-# Request C++11 standard, using new CMake variables.
-set (CMAKE_CXX_STANDARD 11)
+# Request C++17 standard, using new CMake variables.
+set (CMAKE_CXX_STANDARD 17)
 set (CMAKE_CXX_STANDARD_REQUIRED True)
 
 find_package (OpenCV REQUIRED)
 find_package (CUDA REQUIRED)
+
+set(CURL_LIBRARY "-lcurl")
+find_package(CURL REQUIRED)
+include_directories(${CURL_INCLUDE_DIR})
 
 # for YCM
 #set( CMAKE_EXPORT_COMPILE_COMMANDS ON )

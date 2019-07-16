@@ -68,6 +68,47 @@ bool jetnet::save_tensor_text(const float* data, size_t size, std::string filena
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+#include <curl/curl.h>
+
+//curl writefunction to be passed as a parameter
+size_t write_data(char *ptr, size_t size, size_t nmemb, void *userdata) {
+    std::ostringstream *stream = (std::ostringstream*)userdata;
+    size_t count = size * nmemb;
+    stream->write(ptr, count);
+    return count;
+}
+
+//function to retrieve the image as Cv::Mat data type
+cv::Mat jetnet::curl_image(const char *url)
+{
+    //try {
+    cv::Mat image;
+    int cols, rows, channels, type;
+
+    CURL *curl;
+    CURLcode res;
+    std::ostringstream stream;
+    curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_data); // pass the writefunction
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &stream); // pass the stream ptr when the writefunction is called
+    res = curl_easy_perform(curl); // start curl
+
+    std::string output = stream.str(); // convert the stream into a string
+    curl_easy_cleanup(curl); // cleanup
+    std::vector<char> data = std::vector<char>( output.begin(), output.end() ); //convert string into a vector
+    cv::Mat data_mat = cv::Mat(data); // create the cv::Mat datatype from the vector
+
+    int flags = cv::ImreadModes::IMREAD_COLOR; // N.B. for full size, IMREAD_COLOR
+    cv::Mat image_unmanaged = cv::imdecode(data_mat, flags); //read an image from memory buffer
+
+    // clone image data to a managed context (need to test overhead of copy) and free stbi memory
+    image = image_unmanaged.clone();
+    //stbi_image_free(data);
+
+    return image;
+}
+
 
 cv::Mat jetnet::read_image(std::string filename, int expected_channels)
 {

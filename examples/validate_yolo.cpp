@@ -26,6 +26,24 @@ static int get_coco_image_id(const char *filename)
     return atoi(p+1);
 }
 
+std::string log_detections(const std::vector<Detection>& detections, std::vector<std::string> class_labels) {
+    std::ostringstream detection_str_builder;
+
+    for (auto detection : detections) {
+        auto class_label_index = std::max_element(detection.probabilities.begin(), detection.probabilities.end()) - detection.probabilities.begin();
+
+        if (detection.probabilities[class_label_index] > 0.3) {
+            std::string text(std::to_string(static_cast<int>(detection.probabilities[class_label_index] * 100)) + "% " +
+                             class_labels[class_label_index]);
+            std::cout << text << std::endl;
+            detection_str_builder << "_" << class_labels[class_label_index]
+                                  << std::to_string(static_cast<int>(detection.probabilities[class_label_index] * 100));
+        }
+    }
+
+    return detection_str_builder.str();
+}
+/*
 static bool print_cocos(std::ofstream& file, std::string image_name, std::vector<Detection> detections, const std::vector<int> cat_map, bool use_image_paths)
 {
     auto image_id = use_image_paths ? "\"" + image_name + "\"" : std::to_string(get_coco_image_id(image_name.c_str()));
@@ -48,7 +66,7 @@ static bool print_cocos(std::ofstream& file, std::string image_name, std::vector
     }
 
     return true;
-}
+}*/
 
 int main(int argc, char** argv)
 {
@@ -195,22 +213,16 @@ int main(int argc, char** argv)
         }
 
         auto detections = post->get_detections();
+        auto image_name = paths_in_batch[0];
 
-        // write detections to output file
-        for (size_t i=0; i<images.size(); ++i) {
-            auto image_name = paths_in_batch[i];
-            if (!print_cocos(file, image_name, detections[i], cat_map, use_image_paths)) {
-                std::cerr << "Failed to write detections to output file" << std::endl;
-                return -1;
-            }
-        }
+        log_detections(detections[0], class_names);
 
         // print stats
         auto now = std::chrono::high_resolution_clock::now();
         double time_diff = std::chrono::duration<double, std::milli>(now - prev).count();
         prev = now;
         double fps = 1000.0 * batch_size / time_diff;
-        std::cout << img_index << "/" << image_paths.size() << " " << fps << " FPS " << std::endl;
+        std::cout << image_name << "/" << image_paths.size() << " " << fps << " FPS " << std::endl;
     }
 
     file.seekp(-2, std::ios_base::end);   // delete last ,
