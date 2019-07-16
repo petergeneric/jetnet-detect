@@ -16,31 +16,35 @@ using namespace std::chrono;
 using namespace jetnet;
 
 
-bool point_in_triangle(cv::Point s, cv::Point a, cv::Point b, cv::Point c)
+bool is_below_line(cv::Point a, cv::Point b, cv::Point c)
 {
-    int as_x = s.x-a.x;
-    int as_y = s.y-a.y;
+    return (b.x - a.x) * (c.y - a.y) >= (b.y - a.y) * (c.x - a.x);
+}
 
-    bool s_ab = (b.x-a.x)*as_y-(b.y-a.y)*as_x > 0;
+bool is_in_interesting_area(const CameraDefinition &camera, const Detection &detection) {
+    if ((detection.bbox.y + detection.bbox.height) < camera.ignore_all_above_line)
+        return false; // Above ignore line
+    else if (camera.ignore_all_above_point_line) {
+        cv::Point bottom_left(detection.bbox.x, detection.bbox.y + detection.bbox.height);
+        cv::Point bottom_right(detection.bbox.x + detection.bbox.width, detection.bbox.y + detection.bbox.height);
 
-    if((c.x-a.x)*as_y-(c.y-a.y)*as_x > 0 == s_ab) return false;
-
-    if((c.x-b.x)*(s.y-b.y)-(c.y-b.y)*(s.x-b.x) > 0 != s_ab) return false;
-
-    return true;
+        return is_below_line(camera.ignore_line_left, camera.ignore_line_right, bottom_left) ||
+               is_below_line(camera.ignore_line_left, camera.ignore_line_right, bottom_right);
+    } else
+        return true; // Default to saying it is interesting
 }
 
 bool is_valid_person(const CameraDefinition &camera, const Detection &detection, const std::string &label) {
     return (label == "person") &&
            (detection.bbox.area() >= camera.min_person_area) &&
-           (detection.bbox.y + detection.bbox.height) >= camera.ignore_all_above_line;
+           is_in_interesting_area(camera, detection);
 }
 
 bool is_valid_vehicle(const CameraDefinition &camera, const Detection &detection, const std::string &label) {
     return (label == "car" || label == "bus" || label == "truck" || label == "trailer" ||
             label == "motorbike" || label == "boat" || label == "bicycle" || label == "train") &&
            (detection.bbox.area() >= camera.min_vehicle_area) &&
-           (detection.bbox.y + detection.bbox.height) >= camera.ignore_all_above_line;
+            is_in_interesting_area(camera, detection);
 }
 
 bool is_valid_object(const CameraDefinition &camera, const Detection &detection, const std::string &label) {
@@ -55,6 +59,9 @@ std::vector<CameraDefinition> getCameras() {
     lane.ignore_all_above_line = 333;
     lane.min_person_area = 70 * 100;
     lane.min_vehicle_area = 70 * 100;
+    lane.ignore_all_above_point_line = true;
+    lane.ignore_line_left = cv::Point(0, 876);
+    lane.ignore_line_right = cv::Point(1918, 197);
 
     CameraDefinition yard;
     yard.name = "Yard";
@@ -72,6 +79,9 @@ std::vector<CameraDefinition> getCameras() {
     front.ignore_all_above_line = 600;
     front.min_person_area = 40 * 60;
     front.min_vehicle_area = 1600;
+    //front.ignore_all_above_point_line = true;
+    //front.ignore_line_left = cv::Point(0, 876);
+    //front.ignore_line_right = cv::Point(1918, 197);
 
     return {lane, front, yard};
 }
@@ -115,20 +125,26 @@ CameraDetectionState count_objects(const std::vector<std::string> &class_names, 
 std::vector<Detection>
 test_camera(const std::vector<std::string> &class_names, CameraDefinition camera,
             YoloRunnerFactory::PreType &pre, const YoloRunnerFactory::RunnerType &runner,
-            YoloRunnerFactory::PostType &post, cv::Mat &img) {// Read the image
+            YoloRunnerFactory::PostType &post, cv::Mat &img, std::string input_file = "") {// Read the image
     auto start_ms =
             std::chrono::system_clock::now().time_since_epoch() /
             std::chrono::milliseconds(1);
 
     // TODO after download, should we crop+scale to 416x416 with CvLetterBoxPreProcessor?
-    try {
-        img = curl_image(camera.snapshot_url);
+    if (!input_file.empty()) {
+        std::cout << "Reading from file " << input_file << std::endl;
+        img = jetnet::read_image(input_file);
     }
-    catch (cv::Exception e) {
-        std::cerr << "Error loading camera image from " << camera.snapshot_url << std::endl;
-        std::cerr << boost::stacktrace::stacktrace();
+    else {
+        try {
+            img = curl_image(camera.snapshot_url);
+        }
+        catch (cv::Exception e) {
+            std::cerr << "Error loading camera image from " << camera.snapshot_url << std::endl;
+            std::cerr << boost::stacktrace::stacktrace();
 
-        throw e;
+            throw e;
+        }
     }
 
     if (img.empty()) {
@@ -193,8 +209,19 @@ std::string log_detections(const CameraDefinition &camera, const std::vector<Det
     return detection_str_builder.str();
 }
 
-void draw_valid_detections(const CameraDefinition &camera, const std::vector<Detection>& detections, std::vector<std::string> class_labels, cv::Mat& image)
+void draw_valid_detections(const CameraDefinition &camera, const std::vector<Detection>& detections, std::vector<std::string> class_labels, cv::Mat& image, bool draw_all = false)
 {
+    if (camera.ignore_all_above_point_line) {
+        cv::line(image, camera.ignore_line_left, camera.ignore_line_right, cv::Scalar(255, 0, 0));
+    }
+
+    // If enabled, draw the ignore threshold line
+    if (camera.ignore_all_above_line > 0) {
+        cv::Point line_start(0, camera.ignore_all_above_line);
+        cv::Point line_end(image.cols, camera.ignore_all_above_line);
+        cv::line(image, line_start, line_end, cv::Scalar(255, 255, 255));
+    }
+
     const int font_face = cv::FONT_HERSHEY_SIMPLEX;
     const double font_scale = 0.5;
     const int box_thickness = 1;
@@ -223,14 +250,16 @@ void draw_valid_detections(const CameraDefinition &camera, const std::vector<Det
     int number_of_colors = colors.size();
 
     for (auto detection : detections) {
-        cv::Point left_top(     static_cast<int>(detection.bbox.x), static_cast<int>(detection.bbox.y));
-        cv::Point right_bottom( static_cast<int>(detection.bbox.x + detection.bbox.width),
-                                static_cast<int>(detection.bbox.y + detection.bbox.height));
+        cv::Point left_top(static_cast<int>(detection.bbox.x), static_cast<int>(detection.bbox.y));
+        cv::Point right_bottom(static_cast<int>(detection.bbox.x + detection.bbox.width),
+                               static_cast<int>(detection.bbox.y + detection.bbox.height));
 
-        auto class_label_index = std::max_element(detection.probabilities.begin(), detection.probabilities.end()) - detection.probabilities.begin();
+        auto class_label_index = std::max_element(detection.probabilities.begin(), detection.probabilities.end()) -
+                                 detection.probabilities.begin();
         const std::string label = class_labels[class_label_index];
 
-        if (detection.probabilities[class_label_index] >= camera.detect_threshold && is_valid_object(camera, detection, label)) {
+        if (draw_all || (detection.probabilities[class_label_index] >= camera.detect_threshold &&
+                         is_valid_object(camera, detection, label))) {
             cv::Scalar color(colors[class_label_index % number_of_colors]);
             std::string text(
                     std::to_string(static_cast<int>(detection.probabilities[class_label_index] * 100)) + "% " + label);
@@ -253,13 +282,6 @@ void draw_valid_detections(const CameraDefinition &camera, const std::vector<Det
             cv::putText(image, text, text_orig, font_face, font_scale, cv::Scalar(0, 0, 0), text_thickness,
                         cv::LINE_AA);
         }
-
-        // If enabled, draw the ignore threshold line
-        if (camera.ignore_all_above_line > 0) {
-            cv::Point line_start(0, camera.ignore_all_above_line);
-            cv::Point line_end(image.cols, camera.ignore_all_above_line);
-            cv::line(image, line_start, line_end, cv::Scalar(255, 255, 255));
-        }
     }
 }
 
@@ -269,9 +291,11 @@ int main(int argc, char** argv)
     try {
         std::string keys =
                 "{help h usage ? |      | print this message                        }"
-                "{@type          |<none>| Network type (yolov2, yolov3)             }"
+                "{@type          |<none>| Network type (yolov2, yolov3, yolov3-tiny)}"
                 "{@modelfile     |<none>| Built and serialized TensorRT model file  }"
                 "{@nameslist     |<none>| Class names list file                     }"
+                "{file           |      | Single file to analyse (optional)         }"
+                "{camera         | 0    | Camera index to simulate for input file   }"
                 "{profile        |      | Enable profiling                          }"
                 "{imageout       |      | Folder to write output JPGs to            }"
                 "{profile        |      | Enable profiling                          }"
@@ -294,6 +318,8 @@ int main(int argc, char** argv)
         auto threshold = parser.get<float>("thresh");
         auto nms_threshold = parser.get<float>("nmsthresh");
         auto anchors_file = parser.get<std::string>("anchors");
+
+        auto input_file = parser.get<std::string>("file");
 
         if (!parser.check()) {
             parser.printErrors();
@@ -341,6 +367,36 @@ int main(int argc, char** argv)
             return -1;
         }
 
+        if (!input_file.empty()) {
+            auto cam = parser.get<int>("camera");
+
+            CameraDefinition camera = all_cameras[cam];
+
+            cv::Mat img;
+            std::cout << "Test file " << input_file << std::endl;
+            CameraDefinition null_camera;
+            auto detections = test_camera(class_names, null_camera, pre, runner, post, img, input_file);
+
+            auto state = count_objects(class_names, camera, detections);
+
+            if (camera.has_previous_checks == false) {
+                (&all_cameras[cam])->has_previous_checks = true;
+
+                std::ostringstream first_filename_builder;
+
+                std::time_t time = std::time(nullptr);
+                first_filename_builder << input_file << "_output.jpg";
+                std::string output_filename = first_filename_builder.str();
+
+                std::cout << "Writing output image to " << output_filename << std::endl;
+                draw_valid_detections(camera, detections, class_names, img);
+                write_image(output_filename, img);
+            }
+
+
+            return 0;
+        }
+
         bool running = true;
         bool test_main_next = true; // Every other time, test main camera; otherwise pick at random
         while (running) {
@@ -354,6 +410,23 @@ int main(int argc, char** argv)
             auto detections = test_camera(class_names, camera, pre, runner, post, img);
 
             auto state = count_objects(class_names, camera, detections);
+
+            if (camera.has_previous_checks == false) {
+                (&all_cameras[cam])->has_previous_checks = true;
+
+                std::ostringstream first_filename_builder;
+
+                std::time_t time = std::time(nullptr);
+                first_filename_builder << output_folder << "/"
+                                        << std::put_time(std::localtime(&time), "%Y-%m-%d_%H.%M.%S") << "_"
+                                        << camera.name << "_first.jpg";
+                std::string output_filename = first_filename_builder.str();
+
+                std::cout << "Writing first image to " << output_filename << std::endl;
+                draw_valid_detections(camera, detections, class_names, img, true);
+                write_image(output_filename, img);
+                continue;
+            }
 
             if (state.people > camera.state.people || state.vehicles > camera.state.vehicles) {
                 bool trigger_notification;

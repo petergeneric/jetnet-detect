@@ -7,6 +7,7 @@ struct CameraDetectionState {
 };
 
 struct CameraDefinition {
+    bool has_previous_checks = false;
     const char *name;
     const char *snapshot_url;
 
@@ -26,6 +27,10 @@ struct CameraDefinition {
 
     // Ignore any objects whose lowest point is above the named start line; set to 0 to disable
     float ignore_all_above_line = 0;
+
+    bool ignore_all_above_point_line = false;
+    cv::Point ignore_line_left;
+    cv::Point ignore_line_right;
 
     CameraDetectionState state = {};
 };
