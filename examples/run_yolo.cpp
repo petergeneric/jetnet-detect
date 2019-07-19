@@ -36,7 +36,16 @@ bool is_in_interesting_area(const CameraDefinition &camera, const Detection &det
 
 bool is_valid_person(const CameraDefinition &camera, const Detection &detection, const std::string &label) {
     return (label == "person") &&
+            // Apply minimum person area
            (detection.bbox.area() >= camera.min_person_area) &&
+            // Optionally apply max_person_height
+            (camera.max_person_height == 0 || detection.bbox.height <= camera.max_person_height ) &&
+            // Optionally apply special height restriction for people to the right of special_rule_limit_column
+            (camera.special_rule_limit_max_person_height == 0 || camera.special_rule_limit_column == 0 ||
+             (detection.bbox.x >= camera.special_rule_limit_column &&
+              detection.bbox.height <= camera.special_rule_limit_max_person_height))
+            &&
+            // Make sure the object is in an area we care about
            is_in_interesting_area(camera, detection);
 }
 
@@ -44,6 +53,7 @@ bool is_valid_vehicle(const CameraDefinition &camera, const Detection &detection
     return (label == "car" || label == "bus" || label == "truck" || label == "trailer" ||
             label == "motorbike" || label == "boat" || label == "bicycle" || label == "train") &&
            (detection.bbox.area() >= camera.min_vehicle_area) &&
+            (camera.max_vehicle_area == 0 || detection.bbox.area() <= camera.max_vehicle_area) &&
             is_in_interesting_area(camera, detection);
 }
 
@@ -54,14 +64,14 @@ bool is_valid_object(const CameraDefinition &camera, const Detection &detection,
 std::vector<CameraDefinition> getCameras() {
     CameraDefinition lane;
     lane.name = "Lane";
-    lane.retest_if_new_objects_found = true;
+    lane.retest_if_new_objects_found = false;
     lane.snapshot_url = "http://10.5.1.101/snap.jpeg";
-    lane.ignore_all_above_line = 333;
+    lane.ignore_all_above_line = 432;
     lane.min_person_area = 70 * 100;
     lane.min_vehicle_area = 70 * 100;
     lane.ignore_all_above_point_line = true;
-    lane.ignore_line_left = cv::Point(0, 876);
-    lane.ignore_line_right = cv::Point(1918, 197);
+    lane.ignore_line_left = cv::Point(0, 877);
+    lane.ignore_line_right = cv::Point(1918, 212);
 
     CameraDefinition yard;
     yard.name = "Yard";
@@ -78,7 +88,11 @@ std::vector<CameraDefinition> getCameras() {
     front.snapshot_url = "http://10.5.1.113/snap.jpeg";
     front.ignore_all_above_line = 600;
     front.min_person_area = 40 * 60;
+    front.max_person_height = 550;
     front.min_vehicle_area = 1600;
+    front.max_vehicle_area = 634000;
+    front.special_rule_limit_column = 1610;
+    front.special_rule_limit_max_person_height = 170;
     //front.ignore_all_above_point_line = true;
     //front.ignore_line_left = cv::Point(0, 876);
     //front.ignore_line_right = cv::Point(1918, 197);
@@ -222,6 +236,12 @@ void draw_valid_detections(const CameraDefinition &camera, const std::vector<Det
         cv::line(image, line_start, line_end, cv::Scalar(255, 255, 255));
     }
 
+    if (camera.special_rule_limit_column > 0) {
+        cv::Point line_start(camera.special_rule_limit_column, 0);
+        cv::Point line_end(camera.special_rule_limit_column, image.rows);
+        cv::line(image, line_start, line_end, cv::Scalar(255, 255, 0));
+    }
+
     const int font_face = cv::FONT_HERSHEY_SIMPLEX;
     const double font_scale = 0.5;
     const int box_thickness = 1;
@@ -285,6 +305,36 @@ void draw_valid_detections(const CameraDefinition &camera, const std::vector<Det
     }
 }
 
+
+void annotate_and_write_image(const std::string &output_folder, const std::vector<std::string> &class_names,
+                              const CameraDefinition &camera, cv::Mat &img, const std::vector<Detection> &detections,
+                              const CameraDetectionState &state) {
+    std::cout << "Detected new in " << camera.name << ". NewPeople="
+              << (state.people - camera.state.people)
+              << ", NewVehicles=" << (state.vehicles - camera.state.vehicles) << std::endl;
+
+    // Log the detections to the console & write to str
+    std::string detection_str = log_detections(camera, detections, class_names);
+
+    // Don't write an image with no detections
+    if (!detection_str.empty()) {
+        std::ostringstream output_filename_builder;
+
+        time_t now = time(nullptr);
+        output_filename_builder << output_folder << "/"
+                                << std::put_time(localtime(&now), "%Y-%m-%d_%H.%M.%S") << "_"
+                                << camera.name << detection_str << ".jpg";
+        std::string output_filename = output_filename_builder.str();
+        output_filename_builder << ".raw.jpg";
+        std::string raw_output_filename = output_filename_builder.str();
+
+        // Optionally output an image file
+        std::cout << "Writing annotated image to " << output_filename << std::endl;
+        write_image(raw_output_filename, img);
+        draw_valid_detections(camera, detections, class_names, img);
+        write_image(output_filename, img);
+    }
+}
 
 int main(int argc, char** argv)
 {
@@ -439,10 +489,10 @@ int main(int argc, char** argv)
                     // New objects found; retest and notify only if still more objects than last camera state
                     auto detections2 = test_camera(class_names, camera, pre, runner, post, img);
 
-                    auto state2 = count_objects(class_names, camera, detections);
+                    auto state2 = count_objects(class_names, camera, detections2);
 
                     if (state2.people > camera.state.people || state2.vehicles > camera.state.vehicles) {
-                        std::cout << "New objects confirmed with retest!" << std::endl;
+                        std::cout << "New objects confirmed with retest! People " << camera.state.people << "->" << state.people << "->" << state2.people << ", Vehicles " << camera.state.vehicles << "->" << state.vehicles << "->" << state2.vehicles << std::endl;
                         // Retest still shows objects not found in stable state, so trust this run
                         // TODO should we warn if this retest varied from the one we just ran?
                         state = state2; // Use the most recent test
@@ -460,28 +510,8 @@ int main(int argc, char** argv)
                 }
 
                 if (trigger_notification) {
-                    std::cout << "Detected new in " << camera.name << ". NewPeople="
-                              << (state.people - camera.state.people)
-                              << ", NewVehicles=" << (state.vehicles - camera.state.vehicles) << std::endl;
+                    annotate_and_write_image(output_folder, class_names, camera, img, detections, state);
 
-                    // Log the detections to the console & write to str
-                    std::string detection_str = log_detections(camera, detections, class_names);
-
-                    std::ostringstream output_filename_builder;
-
-                    std::time_t time = std::time(nullptr);
-                    output_filename_builder << output_folder << "/"
-                                            << std::put_time(std::localtime(&time), "%Y-%m-%d_%H.%M.%S") << "_"
-                                            << camera.name << detection_str << ".jpg";
-                    std::string output_filename = output_filename_builder.str();
-                    output_filename_builder << ".raw.jpg";
-                    std::string raw_output_filename = output_filename_builder.str();
-
-                    // Optionally output an image file
-                    std::cout << "Writing annotated image to " << output_filename << std::endl;
-                    write_image(raw_output_filename, img);
-                    draw_valid_detections(camera, detections, class_names, img);
-                    write_image(output_filename, img);
                 }
             } else if (state.people == camera.state.people && state.vehicles == camera.state.vehicles) {
                 // Number of objects identical; no action necessary
