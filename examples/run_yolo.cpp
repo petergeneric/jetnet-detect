@@ -38,6 +38,8 @@ bool is_valid_person(const CameraDefinition &camera, const Detection &detection,
     return (label == "person") &&
             // Apply minimum person area
            (detection.bbox.area() >= camera.min_person_area) &&
+           // Apply minimum person height
+           (detection.bbox.height >= camera.min_person_height) &&
             // Optionally apply max_person_height
             (camera.max_person_height == 0 || detection.bbox.height <= camera.max_person_height ) &&
             // Optionally apply special height restriction for people to the right of special_rule_limit_column
@@ -61,14 +63,32 @@ bool is_valid_object(const CameraDefinition &camera, const Detection &detection,
     return is_valid_person(camera, detection, label) || is_valid_vehicle(camera, detection, label);
 }
 
+std::vector<CameraDefinition> getTestCameras() {
+    CameraDefinition front;
+    front.name = "Front";
+    front.retest_if_new_objects_found = true;
+    front.retest_if_objects_disappear = true;
+    front.snapshot_url = "http://10.1.1.51/snap.jpeg";
+    front.ignore_all_above_line = 600;
+    front.min_person_area = 40 * 60;
+    front.max_person_height = 550;
+    front.min_vehicle_area = 1600;
+    front.max_vehicle_area = 634000;
+    front.special_rule_limit_column = 1610;
+    front.special_rule_limit_max_person_height = 170;
+
+    return {front};
+}
+
 std::vector<CameraDefinition> getCameras() {
     CameraDefinition lane;
     lane.name = "Lane";
     lane.retest_if_new_objects_found = false;
     lane.snapshot_url = "http://10.5.1.101/snap.jpeg";
     lane.ignore_all_above_line = 432;
-    lane.min_person_area = 70 * 100;
-    lane.min_vehicle_area = 70 * 100;
+    lane.min_person_area = 70 * 170;
+    lane.min_person_height = 180;
+    lane.min_vehicle_area = 70 * 200;
     lane.ignore_all_above_point_line = true;
     lane.ignore_line_left = cv::Point(0, 877);
     lane.ignore_line_right = cv::Point(1918, 212);
@@ -78,6 +98,7 @@ std::vector<CameraDefinition> getCameras() {
     yard.snapshot_url = "http://10.5.1.112/snap.jpeg";
     yard.retest_if_new_objects_found = true;
     yard.retest_if_objects_disappear = true;
+    lane.min_person_height = 150;
     yard.min_person_area = 70 * 100;
     yard.min_vehicle_area = 70 * 100;
 
@@ -139,7 +160,7 @@ CameraDetectionState count_objects(const std::vector<std::string> &class_names, 
 std::vector<Detection>
 test_camera(const std::vector<std::string> &class_names, CameraDefinition camera,
             YoloRunnerFactory::PreType &pre, const YoloRunnerFactory::RunnerType &runner,
-            YoloRunnerFactory::PostType &post, cv::Mat &img, std::string input_file = "") {// Read the image
+            YoloRunnerFactory::PostType &post, cv::Mat &img, bool debug_mode = false, std::string input_file = "") {// Read the image
     auto start_ms =
             std::chrono::system_clock::now().time_since_epoch() /
             std::chrono::milliseconds(1);
@@ -188,7 +209,8 @@ test_camera(const std::vector<std::string> &class_names, CameraDefinition camera
 
     auto time_taken_ms = end_ms - start_ms;
 
-    //std::cout << "Analysis took " << time_taken_ms << " ms" << std::endl;
+    if (debug_mode)
+        std::cout << "Analysis took " << time_taken_ms << " ms" << std::endl;
 
     if (detections[0].empty()) {
         return {};
@@ -351,6 +373,7 @@ int main(int argc, char** argv)
                 "{profile        |      | Enable profiling                          }"
                 "{t thresh       | 0.24 | Detection threshold                       }"
                 "{nt nmsthresh   | 0.45 | Non-maxima suppression threshold          }"
+                "{test           |      | if supplied, enable test mode             }"
                 "{anchors        |      | Anchor prior file name                    }";
 
         cv::CommandLineParser parser(argc, argv, keys);
@@ -368,6 +391,7 @@ int main(int argc, char** argv)
         auto threshold = parser.get<float>("thresh");
         auto nms_threshold = parser.get<float>("nmsthresh");
         auto anchors_file = parser.get<std::string>("anchors");
+        bool test_mode = parser.has("test");
 
         auto input_file = parser.get<std::string>("file");
 
@@ -396,7 +420,12 @@ int main(int argc, char** argv)
                 anchor_priors.push_back(std::stof(str));
         }
 
-        auto all_cameras = getCameras();
+        std::vector<CameraDefinition> all_cameras;
+
+        if (test_mode)
+            all_cameras = getTestCameras();
+        else
+            all_cameras = getCameras();
 
 
         YoloRunnerFactory runner_fact(class_names.size(), threshold, nms_threshold, 1,
@@ -425,7 +454,7 @@ int main(int argc, char** argv)
             cv::Mat img;
             std::cout << "Test file " << input_file << std::endl;
             CameraDefinition null_camera;
-            auto detections = test_camera(class_names, null_camera, pre, runner, post, img, input_file);
+            auto detections = test_camera(class_names, null_camera, pre, runner, post, img, input_file, test_mode);
 
             auto state = count_objects(class_names, camera, detections);
 
@@ -457,7 +486,7 @@ int main(int argc, char** argv)
 
             cv::Mat img;
             //std::cout << "Test camera " << camera.name << std::endl;
-            auto detections = test_camera(class_names, camera, pre, runner, post, img);
+            auto detections = test_camera(class_names, camera, pre, runner, post, img, test_mode);
 
             auto state = count_objects(class_names, camera, detections);
 
@@ -487,7 +516,7 @@ int main(int argc, char** argv)
                     // TODO fire off a "possible object detection" msg?
 
                     // New objects found; retest and notify only if still more objects than last camera state
-                    auto detections2 = test_camera(class_names, camera, pre, runner, post, img);
+                    auto detections2 = test_camera(class_names, camera, pre, runner, post, img, test_mode);
 
                     auto state2 = count_objects(class_names, camera, detections2);
 
@@ -525,7 +554,7 @@ int main(int argc, char** argv)
                     std::cout << "retesting apparent disappearance" << std::endl;
 
                     // New objects found; retest and notify only if still more objects than last camera state
-                    auto detections2 = test_camera(class_names, camera, pre, runner, post, img);
+                    auto detections2 = test_camera(class_names, camera, pre, runner, post, img, test_mode);
 
                     auto state2 = count_objects(class_names, camera, detections);
 

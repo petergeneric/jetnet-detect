@@ -25,6 +25,9 @@ struct CameraDefinition {
     // The maximum height possible when being classified as a person; set to non-zero to enable
     float max_person_height = 0;
 
+    // The maximum height possible when being classified as a person
+    float min_person_height = 0;
+
     // The minimum area required to be classified as a vehicle
     float min_vehicle_area = 0;
 
