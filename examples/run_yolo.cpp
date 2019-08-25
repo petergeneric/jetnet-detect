@@ -6,6 +6,10 @@
  */
 #include <opencv2/opencv.hpp>   // for commandline parser
 #include <boost/stacktrace.hpp>
+#include <boost/algorithm/string.hpp>
+
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/ini_parser.hpp>
 #include "jetnet.h"
 #include "create_runner.h"
 #include <curl/curl.h>
@@ -63,62 +67,58 @@ bool is_valid_object(const CameraDefinition &camera, const Detection &detection,
     return is_valid_person(camera, detection, label) || is_valid_vehicle(camera, detection, label);
 }
 
-std::vector<CameraDefinition> getTestCameras() {
-    CameraDefinition front;
-    front.name = "Front";
-    front.retest_if_new_objects_found = true;
-    front.retest_if_objects_disappear = true;
-    front.snapshot_url = "http://10.1.1.51/snap.jpeg";
-    front.ignore_all_above_line = 600;
-    front.min_person_area = 40 * 60;
-    front.max_person_height = 550;
-    front.min_vehicle_area = 1600;
-    front.max_vehicle_area = 634000;
-    front.special_rule_limit_column = 1610;
-    front.special_rule_limit_max_person_height = 170;
 
-    return {front};
+CameraDefinition parseCamera(boost::property_tree::ptree config) {
+    std::string name =config.get<std::string>("name");
+    std::string url = config.get<std::string>("url");
+
+    CameraDefinition cam;
+    cam.name = strdup(name.c_str());
+    cam.snapshot_url = strdup(url.c_str());
+
+    cam.detect_threshold = config.get<float>("detect_threshold", 0.3f);
+
+    cam.retest_if_new_objects_found = config.get<bool>("retest_if_new_objects_found", false);
+    cam.retest_if_objects_disappear = config.get<bool>("retest_if_objects_disappear", false);
+
+    cam.special_rule_limit_column = config.get<float>("special_rule_limit_column", 0);
+    cam.special_rule_limit_max_person_height = config.get<float>("special_rule_limit_max_person_height", 0);
+
+    cam.min_person_area = config.get<int>("min_person_area", 0);
+    cam.min_vehicle_area = config.get<int>("min_vehicle_area", 0);
+    cam.min_person_height = config.get<int>("min_person_height", 0);
+    cam.max_person_height = config.get<int>("max_person_height", 0);
+    cam.min_vehicle_area = config.get<int>("max_vehicle_area", 0);
+
+    cam.ignore_all_above_line = config.get<int>("ignore_all_above_line", 0);
+
+    cam.ignore_all_above_point_line = config.get<bool>("ignore_all_above_point_line", false);
+
+    if (cam.ignore_all_above_point_line) {
+        cam.ignore_line_left = cv::Point(config.get<int>("ignore_all_above_point_line_left_x", 0),
+                                         config.get<int>("ignore_all_above_point_line_left_y", 0));
+
+        cam.ignore_line_right = cv::Point(config.get<int>("ignore_all_above_point_line_right_x", 0),
+                                         config.get<int>("ignore_all_above_point_line_right_y", 0));
+    }
+
+    return cam;
 }
 
-std::vector<CameraDefinition> getCameras() {
-    CameraDefinition lane;
-    lane.name = "Lane";
-    lane.retest_if_new_objects_found = false;
-    lane.snapshot_url = "http://10.5.1.101/snap.jpeg";
-    lane.ignore_all_above_line = 432;
-    lane.min_person_area = 70 * 170;
-    lane.min_person_height = 180;
-    lane.min_vehicle_area = 70 * 200;
-    lane.ignore_all_above_point_line = true;
-    lane.ignore_line_left = cv::Point(0, 877);
-    lane.ignore_line_right = cv::Point(1918, 212);
 
-    CameraDefinition yard;
-    yard.name = "Yard";
-    yard.snapshot_url = "http://10.5.1.112/snap.jpeg";
-    yard.retest_if_new_objects_found = true;
-    yard.retest_if_objects_disappear = true;
-    lane.min_person_height = 150;
-    yard.min_person_area = 70 * 100;
-    yard.min_vehicle_area = 70 * 100;
+std::vector<CameraDefinition> getCameras(boost::property_tree::ptree config) {
+    std::string cameranames = config.get<std::string>("General.cameras");
 
-    CameraDefinition front;
-    front.name = "Front";
-    front.retest_if_new_objects_found = true;
-    front.retest_if_objects_disappear = true;
-    front.snapshot_url = "http://10.5.1.113/snap.jpeg";
-    front.ignore_all_above_line = 600;
-    front.min_person_area = 40 * 60;
-    front.max_person_height = 550;
-    front.min_vehicle_area = 1600;
-    front.max_vehicle_area = 634000;
-    front.special_rule_limit_column = 1610;
-    front.special_rule_limit_max_person_height = 170;
-    //front.ignore_all_above_point_line = true;
-    //front.ignore_line_left = cv::Point(0, 876);
-    //front.ignore_line_right = cv::Point(1918, 197);
+    std::vector<std::string> cameraname_list;
 
-    return {lane, front, yard};
+    boost::split(cameraname_list, cameranames, [](char c){return c == ',';});
+
+    std::vector<CameraDefinition> cameras;
+    for (auto cameraname: cameraname_list) {
+        cameras.push_back(parseCamera(config.get_child(cameraname)));
+    }
+
+    return cameras;
 }
 
 CameraDetectionState count_objects(const std::vector<std::string> &class_names, CameraDefinition &camera,
@@ -217,6 +217,33 @@ test_camera(const std::vector<std::string> &class_names, CameraDefinition camera
     }
     else {
         return detections[0];
+    }
+}
+
+void log_detected_objects(const CameraDefinition &camera, const std::vector<Detection>& detections, std::vector<std::string> class_labels) {
+    std::ostringstream output_filename_builder;
+
+    time_t now = time(nullptr);
+
+    if (!detections.empty()) {
+        for (auto detection : detections) {
+            auto class_label_index = std::max_element(detection.probabilities.begin(), detection.probabilities.end()) -
+                                     detection.probabilities.begin();
+
+            const std::string label = class_labels[class_label_index];
+
+            if (detection.probabilities[class_label_index] >= camera.detect_threshold && is_valid_object(camera, detection, label)) {
+                std::string text(
+                        std::to_string(static_cast<int>(detection.probabilities[class_label_index] * 100)) + "% " +
+                        label);
+
+                std::cout << "OBJECT " << camera.name << " " << std::put_time(localtime(&now), "%Y-%m-%d %H:%M:%S")
+                          << " "
+                          << label << " " << std::to_string(
+                        static_cast<int>(detection.probabilities[class_label_index] * 100)) << "% " << detection.bbox.x << "," << detection.bbox.y << " "
+                          << detection.bbox.width << "x" << detection.bbox.height << std::endl;
+            }
+        }
     }
 }
 
@@ -330,7 +357,7 @@ void draw_valid_detections(const CameraDefinition &camera, const std::vector<Det
 
 void annotate_and_write_image(const std::string &output_folder, const std::vector<std::string> &class_names,
                               const CameraDefinition &camera, cv::Mat &img, const std::vector<Detection> &detections,
-                              const CameraDetectionState &state) {
+                              const CameraDetectionState &state, bool write_raw_image = true) {
     std::cout << "Detected new in " << camera.name << ". NewPeople="
               << (state.people - camera.state.people)
               << ", NewVehicles=" << (state.vehicles - camera.state.vehicles) << std::endl;
@@ -347,12 +374,16 @@ void annotate_and_write_image(const std::string &output_folder, const std::vecto
                                 << std::put_time(localtime(&now), "%Y-%m-%d_%H.%M.%S") << "_"
                                 << camera.name << detection_str << ".jpg";
         std::string output_filename = output_filename_builder.str();
-        output_filename_builder << ".raw.jpg";
-        std::string raw_output_filename = output_filename_builder.str();
 
-        // Optionally output an image file
         std::cout << "Writing annotated image to " << output_filename << std::endl;
-        write_image(raw_output_filename, img);
+
+        if (write_raw_image) {
+            output_filename_builder << ".raw.jpg";
+            std::string raw_output_filename = output_filename_builder.str();
+
+            write_image(raw_output_filename, img);
+        }
+
         draw_valid_detections(camera, detections, class_names, img);
         write_image(output_filename, img);
     }
@@ -369,11 +400,13 @@ int main(int argc, char** argv)
                 "{file           |      | Single file to analyse (optional)         }"
                 "{camera         | 0    | Camera index to simulate for input file   }"
                 "{profile        |      | Enable profiling                          }"
+                "{config         |      | Config INI file                           }"
                 "{imageout       |      | Folder to write output JPGs to            }"
                 "{profile        |      | Enable profiling                          }"
                 "{t thresh       | 0.24 | Detection threshold                       }"
                 "{nt nmsthresh   | 0.45 | Non-maxima suppression threshold          }"
                 "{test           |      | if supplied, enable test mode             }"
+                "{saveraw        |      | if supplied, saves raw .jpg files too     }"
                 "{anchors        |      | Anchor prior file name                    }";
 
         cv::CommandLineParser parser(argc, argv, keys);
@@ -392,8 +425,9 @@ int main(int argc, char** argv)
         auto nms_threshold = parser.get<float>("nmsthresh");
         auto anchors_file = parser.get<std::string>("anchors");
         bool test_mode = parser.has("test");
-
+        bool write_raw_images = parser.has("saveraw");
         auto input_file = parser.get<std::string>("file");
+        auto config_file = parser.get<std::string>("config");
 
         if (!parser.check()) {
             parser.printErrors();
@@ -422,10 +456,11 @@ int main(int argc, char** argv)
 
         std::vector<CameraDefinition> all_cameras;
 
-        if (test_mode)
-            all_cameras = getTestCameras();
-        else
-            all_cameras = getCameras();
+
+        boost::property_tree::ptree configdata;
+        boost::property_tree::ini_parser::read_ini(config_file, configdata);
+
+        all_cameras = getCameras(configdata);
 
 
         YoloRunnerFactory runner_fact(class_names.size(), threshold, nms_threshold, 1,
@@ -454,7 +489,7 @@ int main(int argc, char** argv)
             cv::Mat img;
             std::cout << "Test file " << input_file << std::endl;
             CameraDefinition null_camera;
-            auto detections = test_camera(class_names, null_camera, pre, runner, post, img, input_file, test_mode);
+            auto detections = test_camera(class_names, null_camera, pre, runner, post, img, test_mode, input_file);
 
             auto state = count_objects(class_names, camera, detections);
 
@@ -507,6 +542,10 @@ int main(int argc, char** argv)
                 continue;
             }
 
+            // Record raw detection data
+            if (state.people != 0 || state.vehicles != 0)
+                log_detected_objects(camera, detections, class_names);
+
             if (state.people > camera.state.people || state.vehicles > camera.state.vehicles) {
                 bool trigger_notification;
 
@@ -519,6 +558,11 @@ int main(int argc, char** argv)
                     auto detections2 = test_camera(class_names, camera, pre, runner, post, img, test_mode);
 
                     auto state2 = count_objects(class_names, camera, detections2);
+
+                    // Record raw detection data
+                    if (state2.people != 0 || state2.vehicles != 0)
+                        log_detected_objects(camera, detections2, class_names);
+
 
                     if (state2.people > camera.state.people || state2.vehicles > camera.state.vehicles) {
                         std::cout << "New objects confirmed with retest! People " << camera.state.people << "->" << state.people << "->" << state2.people << ", Vehicles " << camera.state.vehicles << "->" << state.vehicles << "->" << state2.vehicles << std::endl;
@@ -539,8 +583,7 @@ int main(int argc, char** argv)
                 }
 
                 if (trigger_notification) {
-                    annotate_and_write_image(output_folder, class_names, camera, img, detections, state);
-
+                    annotate_and_write_image(output_folder, class_names, camera, img, detections, state, write_raw_images);
                 }
             } else if (state.people == camera.state.people && state.vehicles == camera.state.vehicles) {
                 // Number of objects identical; no action necessary
