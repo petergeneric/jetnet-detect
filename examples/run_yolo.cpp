@@ -88,7 +88,7 @@ CameraDefinition parseCamera(boost::property_tree::ptree config) {
     cam.min_vehicle_area = config.get<int>("min_vehicle_area", 0);
     cam.min_person_height = config.get<int>("min_person_height", 0);
     cam.max_person_height = config.get<int>("max_person_height", 0);
-    cam.min_vehicle_area = config.get<int>("max_vehicle_area", 0);
+    cam.max_vehicle_area = config.get<int>("max_vehicle_area", 0);
 
     cam.ignore_all_above_line = config.get<int>("ignore_all_above_line", 0);
 
