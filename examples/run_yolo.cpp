@@ -76,6 +76,8 @@ CameraDefinition parseCamera(boost::property_tree::ptree config) {
     cam.name = strdup(name.c_str());
     cam.snapshot_url = strdup(url.c_str());
 
+    cam.write_images = config.get<bool>("write_images", true);
+
     cam.detect_threshold = config.get<float>("detect_threshold", 0.3f);
 
     cam.retest_if_new_objects_found = config.get<bool>("retest_if_new_objects_found", false);
@@ -226,6 +228,8 @@ void log_detected_objects(const CameraDefinition &camera, const std::vector<Dete
     time_t now = time(nullptr);
 
     if (!detections.empty()) {
+        const uint64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+
         for (auto detection : detections) {
             auto class_label_index = std::max_element(detection.probabilities.begin(), detection.probabilities.end()) -
                                      detection.probabilities.begin();
@@ -233,15 +237,9 @@ void log_detected_objects(const CameraDefinition &camera, const std::vector<Dete
             const std::string label = class_labels[class_label_index];
 
             if (detection.probabilities[class_label_index] >= camera.detect_threshold && is_valid_object(camera, detection, label)) {
-                std::string text(
-                        std::to_string(static_cast<int>(detection.probabilities[class_label_index] * 100)) + "% " +
-                        label);
-
-                std::cout << "OBJECT " << camera.name << " " << std::put_time(localtime(&now), "%Y-%m-%d %H:%M:%S")
-                          << " "
-                          << label << " " << std::to_string(
-                        static_cast<int>(detection.probabilities[class_label_index] * 100)) << "% " << detection.bbox.x << "," << detection.bbox.y << " "
-                          << detection.bbox.width << "x" << detection.bbox.height << std::endl;
+                std::cout << "OBJECT " << camera.name << "," << now << ","
+                          << label << "," << static_cast<int>(detection.probabilities[class_label_index] * 100) << "," << detection.bbox.x << "," << detection.bbox.y << " "
+                          << detection.bbox.width << "," << detection.bbox.height << std::endl;
             }
         }
     }
@@ -358,6 +356,8 @@ void draw_valid_detections(const CameraDefinition &camera, const std::vector<Det
 void annotate_and_write_image(const std::string &output_folder, const std::vector<std::string> &class_names,
                               const CameraDefinition &camera, cv::Mat &img, const std::vector<Detection> &detections,
                               const CameraDetectionState &state, bool write_raw_image = true) {
+    if (!camera.write_images)
+        return; // If image writing is disabled, don't do anything
     std::cout << "Detected new in " << camera.name << ". NewPeople="
               << (state.people - camera.state.people)
               << ", NewVehicles=" << (state.vehicles - camera.state.vehicles) << std::endl;
@@ -528,17 +528,19 @@ int main(int argc, char** argv)
             if (camera.has_previous_checks == false) {
                 (&all_cameras[cam])->has_previous_checks = true;
 
-                std::ostringstream first_filename_builder;
+                if (camera.write_images) {
+                    std::ostringstream first_filename_builder;
 
-                std::time_t time = std::time(nullptr);
-                first_filename_builder << output_folder << "/"
-                                        << std::put_time(std::localtime(&time), "%Y-%m-%d_%H.%M.%S") << "_"
-                                        << camera.name << "_first.jpg";
-                std::string output_filename = first_filename_builder.str();
+                    std::time_t time = std::time(nullptr);
+                    first_filename_builder << output_folder << "/"
+                                           << std::put_time(std::localtime(&time), "%Y-%m-%d_%H.%M.%S") << "_"
+                                           << camera.name << "_first.jpg";
+                    std::string output_filename = first_filename_builder.str();
 
-                std::cout << "Writing first image to " << output_filename << std::endl;
-                draw_valid_detections(camera, detections, class_names, img, true);
-                write_image(output_filename, img);
+                    std::cout << "Writing first image to " << output_filename << std::endl;
+                    draw_valid_detections(camera, detections, class_names, img, true);
+                    write_image(output_filename, img);
+                }
                 continue;
             }
 
@@ -582,7 +584,7 @@ int main(int argc, char** argv)
                     trigger_notification = true; // Config says no need to re-check
                 }
 
-                if (trigger_notification) {
+                if (trigger_notification && camera.write_images) {
                     annotate_and_write_image(output_folder, class_names, camera, img, detections, state, write_raw_images);
                 }
             } else if (state.people == camera.state.people && state.vehicles == camera.state.vehicles) {

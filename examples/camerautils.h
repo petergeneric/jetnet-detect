@@ -11,6 +11,9 @@ struct CameraDefinition {
     const char *name;
     const char *snapshot_url;
 
+    // If false, images cannot be written to disk
+    bool write_images = true;
+
     float detect_threshold = 0.3f;
 
     // If true, re-checks if there are more people/vehicles detected in this frame vs last time
